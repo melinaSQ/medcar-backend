@@ -4,12 +4,17 @@ import { AuthController } from './auth.controller';
 import { UsersModule } from 'src/users/users.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from 'src/users/user.entity';
-import { UsersService } from 'src/users/users.service';
+import { JwtModule } from '@nestjs/jwt';
+import { jwtConstants } from './jwt.constants';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User]),
-    UsersModule
+    UsersModule,
+    JwtModule.register({
+      secret: jwtConstants.secret, // ¡MUY IMPORTANTE! Mueve esto a variables de entorno (.env) más adelante
+      signOptions: { expiresIn: '2d' }, // El token expirará en 2 días
+    }),
   ],
   providers: [AuthService],
   controllers: [AuthController]

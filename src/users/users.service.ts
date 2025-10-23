@@ -57,6 +57,27 @@ export class UsersService {
         }
     }
 
+    /**
+   * Busca un usuario por su dirección de email.
+   * Este método es utilizado principalmente por el AuthService para el proceso de login.
+   * Es crucial que DEVUELVA el hash de la contraseña para su posterior comparación.
+   * @param email - El email del usuario a buscar.
+   * @returns El objeto completo del usuario si se encuentra, incluyendo la contraseña hasheada.
+   */
+    async findByEmail(email: string): Promise<User | null> {
+        const user = await this.usersRepository.findOne({
+            where: { email },
+        });
+
+        // No es necesario lanzar un 'NotFoundException' aquí.
+        // El AuthService se encargará de manejar el caso en que el usuario sea 'null'.
+        // Simplemente devolvemos lo que encontramos (el usuario o null).
+
+        return user;
+    }
+
+    //findOne(id): Busca un usuario por su ID.
+
 
 
 }
