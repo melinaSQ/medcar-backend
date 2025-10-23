@@ -10,6 +10,7 @@ import { ShiftCodesModule } from './shift_codes/shift_codes.module';
 import { ShiftsModule } from './shifts/shifts.module';
 import { ServiceRequestsModule } from './service_requests/service_requests.module';
 import { RatingsModule } from './ratings/ratings.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { RatingsModule } from './ratings/ratings.module';
     ShiftsModule,
     ServiceRequestsModule,
     RatingsModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
