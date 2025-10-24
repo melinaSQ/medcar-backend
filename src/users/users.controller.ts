@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UsersService } from './users.service';
-import { JwtAuthGuard } from 'src/auth/dto/jwt/jwt-auth.guard';
+import { JwtAuthGuard } from 'src/auth/jwt/jwt-auth.guard';
 
 //Aqui van los endpoints para manejar las solicitudes HTTP relacionadas con los usuarios
 //definimos rutas y metodos para manejar las solicitudes

@@ -5,9 +5,9 @@ import { UsersModule } from 'src/users/users.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from 'src/users/user.entity';
 import { JwtModule } from '@nestjs/jwt';
-import { jwtConstants } from './dto/jwt/jwt.constants';
-import { JwtStrategy } from './dto/jwt/jwt.strategy';
-import { JwtAuthGuard } from './dto/jwt/jwt-auth.guard';
+import { jwtConstants } from './jwt/jwt.constants';
+import { JwtStrategy } from './jwt/jwt.strategy';
+import { JwtAuthGuard } from './jwt/jwt-auth.guard';
 
 @Module({
   imports: [

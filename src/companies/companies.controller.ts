@@ -1,9 +1,9 @@
 import { Body, Controller, Post, UseGuards, Request, Patch, Param, ParseIntPipe } from '@nestjs/common';
-import { JwtAuthGuard } from 'src/auth/dto/jwt/jwt-auth.guard';
+import { JwtAuthGuard } from 'src/auth/jwt/jwt-auth.guard';
 import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
-import { JwtRolesGuard } from 'src/auth/dto/jwt/jwt-roles.guard';
-import { HasRoles } from 'src/auth/dto/jwt/roles.decorator';
+import { JwtRolesGuard } from 'src/auth/jwt/jwt-roles.guard';
+import { HasRoles } from 'src/auth/jwt/roles.decorator';
 import { Rol } from 'src/common/enums/rol.enum';
 
 
