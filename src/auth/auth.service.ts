@@ -23,11 +23,30 @@ export class AuthService {
      * @param registerDto - El DTO con los datos del nuevo usuario.
      * @returns el usuario creado
      */
-    async register(registerDto: CreateUserDto): Promise<User> {
+    async register(registerDto: CreateUserDto): Promise<{ user: User, accessToken: string }> {
         // Simplemente delega la creación al servicio de usuarios.
         // Toda la lógica de validación, hasheo y guardado está ahora en un solo lugar.
-        const user = await this.usersService.create(registerDto);
-        return user;
+        const newUser = await this.usersService.create(registerDto);
+
+        // 2. Si la creación fue exitosa, ¡simplemente llamamos al método login!
+        //    Pero en lugar de validar la contraseña, ya tenemos el objeto de usuario,
+        //    así que creamos una versión simplificada del login para generar el token.
+        const payload = { 
+            sub: newUser.id,
+            roles: newUser.roles
+        };
+        
+        const accessToken = this.jwtService.sign(payload);
+
+        // 3. Devolvemos el nuevo usuario (sin la contraseña) y el token.
+        return {
+            user: newUser, // newUser ya viene sin la contraseña desde el UsersService
+            accessToken: accessToken,
+            //accessToken: 'Bearer ' + accessToken,
+            
+        };
+
+        
     }
 
     //*metodo para controlar el login de usuarios

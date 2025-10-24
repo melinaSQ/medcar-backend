@@ -13,6 +13,12 @@ async function bootstrap() {
     transformOptions: { enableImplicitConversion: true }, // Permite conversiones implícitas de tipos
   }));
 
-  await app.listen(process.env.PORT ?? 3000);
+  // Definimos el puerto y el host (la IP)
+  const port = process.env.PORT || 3000;
+  const host = '0.0.0.0';
+
+  await app.listen(port, host);
+
+  console.log(`Application is running on: ${await app.getUrl()}`);
 }
 bootstrap();
