@@ -78,6 +78,28 @@ export class UsersService {
 
     //findOne(id): Busca un usuario por su ID.
 
+    
+
+    /**
+   * Obtiene una lista de todos los usuarios registrados en el sistema.
+   * Este método se asegura de eliminar las contraseñas antes de devolver los datos.
+   * @returns Una promesa que resuelve a un array de entidades User (sin la contraseña).
+   */
+    async findAll(): Promise<User[]> {
+        // 1. Obtenemos todos los usuarios de la base de datos.
+        //    Por defecto, 'find()' trae todas las columnas.
+        const users = await this.usersRepository.find();
+
+        // 2. Iteramos sobre cada usuario para eliminar la propiedad 'password'.
+        //    Aunque 'forEach' funciona, 'map' es una forma más funcional y limpia de transformar un array en otro.
+        const usersWithoutPasswords = users.map(user => {
+            const { password, ...userWithoutPassword } = user;
+            return userWithoutPassword;
+        });
+
+        return usersWithoutPasswords as User[];
+    }
+
 
 
 }
