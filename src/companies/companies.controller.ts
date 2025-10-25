@@ -3,8 +3,9 @@ import { JwtAuthGuard } from 'src/auth/jwt/jwt-auth.guard';
 import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
 import { JwtRolesGuard } from 'src/auth/jwt/jwt-roles.guard';
-import { HasRoles } from 'src/auth/jwt/roles.decorator';
+import { HasRoles } from 'src/auth/jwt/jwt-roles.decorator';
 import { Rol } from 'src/common/enums/rol.enum';
+import { AssignDriverDto } from './dto/assign-driver.dto';
 
 
 @Controller('companies')
@@ -36,5 +37,16 @@ export class CompaniesController {
     @HasRoles(Rol.ADMIN) // <-- Define que solo los ADMIN pueden acceder
     approve(@Param('id', ParseIntPipe) id: number) {
         return this.companiesService.approve(id);
+    }
+
+    /**
+   * Endpoint para que un COMPANY_ADMIN asigne el rol de DRIVER a un usuario existente.
+   */
+    @Post('assign-driver')
+    @UseGuards(JwtAuthGuard, JwtRolesGuard)
+    @HasRoles(Rol.COMPANY_ADMIN)
+    assignDriver(@Body() assignDriverDto: AssignDriverDto, @Request() req) {
+        const adminUserId = req.user.id;
+        return this.companiesService.assignDriver(assignDriverDto, adminUserId);
     }
 }

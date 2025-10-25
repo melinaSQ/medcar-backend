@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Company } from './company.entity';
@@ -6,6 +6,7 @@ import { CreateCompanyDto } from './dto/create-company.dto';
 import { CompanyStatus } from 'src/common/enums/company-status.enum';
 import { User } from 'src/users/user.entity';
 import { Rol } from 'src/common/enums/rol.enum';
+import { AssignDriverDto } from './dto/assign-driver.dto';
 
 
 @Injectable()
@@ -91,5 +92,49 @@ export class CompaniesService {
         const updatedCompany = await this.companyRepository.save(company);
 
         return updatedCompany;
+    }
+
+    /**
+     * Designa a un usuario existente como conductor de la compañía del admin autenticado.
+     * @param assignDriverDto - DTO que contiene el email del futuro conductor.
+     * @param adminUserId - ID del Admin de Empresa que realiza la acción.
+     * @returns El objeto del usuario actualizado.
+     */
+    async assignDriver(assignDriverDto: AssignDriverDto, adminUserId: number): Promise<User> {
+        // Extraemos el email del DTO
+        const { driverEmail } = assignDriverDto;
+
+        // 1. Verificar que el admin que hace la petición realmente gestiona una empresa.
+        const company = await this.companyRepository.findOneBy({ user: { id: adminUserId } });
+        if (!company) {
+            throw new UnauthorizedException('No tienes permisos para gestionar una compañía.');
+        }
+
+        // 2. Buscar al usuario que se convertirá en conductor.
+        const driverUser = await this.userRepository.findOneBy({ email: driverEmail });
+        if (!driverUser) {
+            throw new NotFoundException(`No se encontró un usuario con el email: ${driverEmail}`);
+        }
+
+        // 3. Lógica de negocio: ¿Puede este usuario ser un conductor?
+        //    (ej. un Admin de otra empresa no debería poder ser conductor).
+        if (driverUser.roles.includes(Rol.COMPANY_ADMIN) || driverUser.roles.includes(Rol.ADMIN)) {
+            throw new ConflictException('Este usuario ya tiene un rol administrativo y no puede ser asignado como conductor.');
+        }
+
+        // 4. Añadir el rol de DRIVER si no lo tiene ya.
+        if (!driverUser.roles.includes(Rol.DRIVER)) {
+            driverUser.roles.push(Rol.DRIVER);
+        } else {
+            // Opcional: si ya es conductor, podrías simplemente devolver el usuario o lanzar un error.
+            // Por ahora, si ya es conductor, simplemente lo reafirmamos.
+        }
+
+        // 5. Guardar los cambios en la entidad User.
+        const updatedUser = await this.userRepository.save(driverUser);
+
+        // 6. Eliminar la contraseña antes de devolver la respuesta.
+        delete (updatedUser as any).password;
+        return updatedUser;
     }
 }
