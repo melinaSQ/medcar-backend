@@ -4,7 +4,7 @@ import { CreateAmbulanceDto } from './dto/create-ambulance.dto';
 import { JwtAuthGuard } from 'src/auth/jwt/jwt-auth.guard';
 import { JwtRolesGuard } from 'src/auth/jwt/jwt-roles.guard';
 import { Rol } from 'src/common/enums/rol.enum';
-import { HasRoles } from 'src/auth/jwt/roles.decorator';
+import { HasRoles } from 'src/auth/jwt/jwt-roles.decorator';
 
 @Controller('ambulances')
 @UseGuards(JwtAuthGuard, JwtRolesGuard) // Protegemos todo el controlador
