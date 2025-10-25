@@ -25,6 +25,7 @@ import { AuthModule } from './auth/auth.module';
       //entities: [__dirname + '/**/*.entity{.ts,.js}'],  //para que tome todas las entidades por archivos
       autoLoadEntities: true, //carga automaticamente las entidades registradas en los modulos
       synchronize: true,
+      legacySpatialSupport: false,   // ⬅️ usa ST_AsText/ST_GeomFromText en vez de AsText
     }),
     UsersModule,
     CompaniesModule,
@@ -38,4 +39,4 @@ import { AuthModule } from './auth/auth.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }

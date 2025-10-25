@@ -4,13 +4,8 @@ import { Rating } from "src/ratings/rating.entity";
 import { Shift } from "src/shifts/shift.entity";
 import { User } from "src/users/user.entity";
 import { BeforeInsert, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMany, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import type { Point } from 'geojson';
 //import { Rating } from "../../ratings/entities/rating.entity"; // Importaremos esto en el futuro
-
-// Interfaz para representar un punto geográfico
-interface Point {
-    type: 'Point';
-    coordinates: [number, number]; // [longitud, latitud]
-}
 
 @Entity({ name: 'service_requests' })
 export class ServiceRequest {
@@ -38,7 +33,7 @@ export class ServiceRequest {
         type: 'point', // 'point' es un alias que ya implica spatialFeatureType: 'Point'
         //spatialFeatureType: 'Point', 
         srid: 4326, // Opcional: Standard GPS coordinates
-        nullable: false
+        nullable: false,
     })
     originLocation: Point;
 
