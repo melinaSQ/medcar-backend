@@ -7,10 +7,12 @@ import { AuthModule } from 'src/auth/auth.module';
 import { User } from 'src/users/user.entity';
 import { Shift } from 'src/shifts/shift.entity';
 import { Company } from 'src/companies/company.entity';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
     AuthModule,
+    NotificationsModule, 
     TypeOrmModule.forFeature([ServiceRequest, User, Shift, Company]),
   ],
   providers: [ServiceRequestsService],

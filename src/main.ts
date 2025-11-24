@@ -6,6 +6,13 @@ import { ValidationPipe } from '@nestjs/common';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  app.enableCors({
+    //origin: '*', // Permite cualquier origen. Para producción, sé más específico: ['http://localhost:3001', 'https://miapp.com']
+    origin: true,
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
+  });
+
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true, // Ignora los datos que no están en el DTO
     forbidNonWhitelisted: true, // Lanza un error si se envían datos no permitidos

@@ -8,6 +8,7 @@ import { CreateServiceRequestDto } from './dto/create-service-request.dto';
 import { ServiceRequestStatus } from 'src/common/enums/service-request-status.enum';
 import { AssignRequestDto } from './dto/assign-request.dto';
 import type { Point } from 'geojson';
+import { NotificationsGateway } from 'src/notifications/notifications.gateway';
 
 @Injectable()
 export class ServiceRequestsService {
@@ -18,6 +19,7 @@ export class ServiceRequestsService {
         private readonly shiftRepository: Repository<Shift>,
         @InjectRepository(Company)
         private readonly companyRepository: Repository<Company>,
+        private readonly notificationsGateway: NotificationsGateway,
     ) { }
 
     async create(createDto: CreateServiceRequestDto, clientId: number): Promise<ServiceRequest> {
@@ -71,6 +73,7 @@ export class ServiceRequestsService {
             console.log('Objeto a guardar:', newRequest);
 
             const savedRequest = await this.serviceRequestRepository.save(newRequest);
+            this.notificationsGateway.emitNewServiceRequest(savedRequest.id);
 
             console.log('--- 6. ¡GUARDADO CON ÉXITO! ---');
             console.log('TODO: Notificar a los admins por WebSocket sobre la nueva solicitud:', savedRequest.id);
@@ -100,8 +103,10 @@ export class ServiceRequestsService {
         }
 
         const [request, shift] = await Promise.all([
-            this.serviceRequestRepository.findOneBy({ id: requestId }),
-            this.shiftRepository.findOne({ where: { id: shiftId }, relations: ['ambulance.company'] }),
+            //socket ¡IMPORTANTE! Al buscar la solicitud, ahora también cargamos el cliente.
+            this.serviceRequestRepository.findOne({ where: { id: requestId }, relations: ['client'] }),
+            //socket ¡IMPORTANTE! Al buscar el turno, ahora también cargamos el conductor.
+            this.shiftRepository.findOne({ where: { id: shiftId }, relations: ['ambulance.company', 'driver'] }),
         ]);
 
         if (!request) throw new NotFoundException(`Solicitud con ID ${requestId} no encontrada.`);
@@ -120,7 +125,23 @@ export class ServiceRequestsService {
         request.status = ServiceRequestStatus.ASSIGNED;
         const updatedRequest = await this.serviceRequestRepository.save(request);
 
-        console.log(`TODO: Notificar al cliente y al conductor sobre la asignación.`);
+        // --- ¡AQUÍ ESTÁ LA NUEVA LÓGICA DE NOTIFICACIÓN! ---
+
+        // 1. Notificar al CONDUCTOR
+        //    Verificamos que el turno tenga un conductor asociado antes de notificar.
+        if (shift && shift.driver && shift.driver.id) {
+            // Le enviamos la notificación de 'nueva misión' a su sala privada.
+            this.notificationsGateway.emitNewMissionToDriver(shift.driver.id, updatedRequest);
+        }
+
+        // 2. Notificar al CLIENTE
+        //    Verificamos que la solicitud tenga un cliente asociado.
+        if (request && request.client && request.client.id) {
+            // Le enviamos la notificación de 'solicitud asignada' a su sala privada.
+            this.notificationsGateway.emitRequestAssignedToClient(request.client.id, updatedRequest);
+
+            console.log(`TODO: Notificar al cliente y al conductor sobre la asignación.`);
+        }
 
         return updatedRequest;
     }
