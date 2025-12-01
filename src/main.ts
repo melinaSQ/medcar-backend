@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'; // <-- Importa las nuevas herramientas
 
 //este archivo es el que crea el servidor que va a estar escuchando en el puerto 3000
 async function bootstrap() {
@@ -12,6 +13,16 @@ async function bootstrap() {
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
+
+  const config = new DocumentBuilder()
+    .setTitle('MED-CAR API')
+    .setDescription('Documentación de la API para la aplicación de gestión de ambulancias MED-CAR.')
+    .setVersion('1.0')
+    .addBearerAuth() // <-- ¡IMPORTANTE! Esto añade un candado a los endpoints protegidos
+    .build();
+
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api-docs', app, document); // <-- La URL será http://localhost:3000/api-docs
 
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true, // Ignora los datos que no están en el DTO
