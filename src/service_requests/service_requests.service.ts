@@ -10,6 +10,7 @@ import { AssignRequestDto } from './dto/assign-request.dto';
 import type { Point } from 'geojson';
 import { NotificationsGateway } from 'src/notifications/notifications.gateway';
 
+
 @Injectable()
 export class ServiceRequestsService {
     constructor(
@@ -87,13 +88,24 @@ export class ServiceRequestsService {
         }
     }
 
+    /**
+   * Encuentra todas las solicitudes de servicio que están pendientes de asignación.
+   * @returns Un array de entidades ServiceRequest.
+   */
     async findAllPending(): Promise<ServiceRequest[]> {
         return this.serviceRequestRepository.find({
             where: { status: ServiceRequestStatus.SEARCHING },
+            // Cargamos la relación con el cliente para mostrar sus datos en el frontend
             relations: ['client'],
         });
     }
 
+    /**
+   * Asigna un turno (conductor + ambulancia) a una solicitud de servicio pendiente.
+   * @param assignDto - Contiene el requestId y el shiftId.
+   * @param adminUserId - El ID del COMPANY_ADMIN que realiza la acción.
+   * @returns La solicitud de servicio actualizada.
+   */
     async assign(assignDto: AssignRequestDto, adminUserId: number): Promise<ServiceRequest> {
         const { requestId, shiftId } = assignDto;
 
@@ -119,6 +131,21 @@ export class ServiceRequestsService {
         }
         if (shift.ambulance.company.id !== adminCompany.id) {
             throw new UnauthorizedException(`El turno ${shiftId} no pertenece a tu compañía.`);
+        }
+
+        // --- ¡NUEVA VALIDACIÓN DE CONCURRENCIA! ---
+        const isShiftAlreadyAssigned = await this.serviceRequestRepository.findOneBy({
+            shift: { id: shiftId },
+            status: In([
+                ServiceRequestStatus.ASSIGNED,
+                ServiceRequestStatus.ON_THE_WAY,
+                ServiceRequestStatus.ON_SITE,
+                ServiceRequestStatus.TRAVELLING
+            ]),
+        });
+
+        if (isShiftAlreadyAssigned) {
+            throw new ConflictException(`El turno ${shiftId} ya está atendiendo otra emergencia.`);
         }
 
         request.shift = shift;

@@ -7,6 +7,29 @@ import { BeforeInsert, Column, CreateDateColumn, Entity, Index, JoinColumn, Many
 import type { Point } from 'geojson';
 //import { Rating } from "../../ratings/entities/rating.entity"; // Importaremos esto en el futuro
 
+const pointTransformer = {
+    to: (value: Point): string => {
+        if (!value) {
+            return '';
+        }
+        // Formato WKT: POINT(longitud latitud)
+        return `POINT(${value.coordinates[0]} ${value.coordinates[1]})`;
+    },
+    from: (value: string): Point => {
+        // La función 'from' sigue siendo útil para la lectura.
+        // Aunque legacySpatialSupport lo arregla, tenerlo aquí es más robusto.
+        if (!value) {
+            return { type: 'Point', coordinates: [0, 0] };
+        }
+        const match = value.match(/POINT\(([^)]+)\)/);
+        if (!match || !match[1]) {
+            return { type: 'Point', coordinates: [0, 0] };
+        }
+        const [longitude, latitude] = match[1].split(' ').map(parseFloat);
+        return { type: 'Point', coordinates: [longitude, latitude] };
+    },
+};
+
 @Entity({ name: 'service_requests' })
 export class ServiceRequest {
     @PrimaryGeneratedColumn()
@@ -19,13 +42,13 @@ export class ServiceRequest {
     })
     emergencyType: EmergencyType;
 
-    @Column({ 
-        name: 'origin_description', 
-        type: 'text', 
-        nullable: true 
+    @Column({
+        name: 'origin_description',
+        type: 'text',
+        nullable: true
     })
     originDescription: string;
-    
+
     // --- ¡COLUMNA DE GEOLOCALIZACIÓN! ---
     @Index({ spatial: true }) // Crea un índice espacial para búsquedas rápidas por ubicación
     @Column({
@@ -34,10 +57,11 @@ export class ServiceRequest {
         //spatialFeatureType: 'Point', 
         srid: 4326, // Opcional: Standard GPS coordinates
         nullable: false,
+        transformer: pointTransformer,
     })
     originLocation: Point;
 
-     @Column({
+    @Column({
         name: 'origin_address_text',
         type: 'varchar',
         length: 255,

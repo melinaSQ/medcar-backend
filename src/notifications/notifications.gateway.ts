@@ -1,186 +1,139 @@
-import { Injectable } from '@nestjs/common';
-import { OnGatewayConnection, OnGatewayDisconnect, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
+//import { WebSocketGateway, SubscribeMessage, WebSocketServer, OnGatewayConnection, OnGatewayDisconnect } from '@nestjs/platform-socket.io';
 import { Server, Socket } from 'socket.io';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { JwtPayload } from 'src/auth/jwt/jwt.strategy'; // Asegúrate de que este path sea correcto
+import { WebSocketGateway, SubscribeMessage, WebSocketServer, OnGatewayConnection, OnGatewayDisconnect } from '@nestjs/websockets';
 
-//Esta clase contendrá el código para manejar conexiones y emitir eventos. Usaremos el concepto de "Salas" (Rooms) para dirigir los mensajes solo a quien debe recibirlos.
+// Este diccionario debe estar FUERA de la clase para que sea un estado global del servidor
+const connectedClients: { [userId: number]: Socket } = {};
 
-// Diccionario para rastrear qué usuario (por ID) está conectado en qué socket (para mensajes privados)
-// { [userId: number]: Socket[] }
-const connectedClients: { [userId: number]: Socket[] } = {};
-
-// Gateway principal que maneja todas las conexiones WebSocket
 @Injectable()
 @WebSocketGateway({
-  namespace: '/notifications',
   cors: {
-    origin: '*', // Permitir cualquier origen (ajustar en producción)
-    credentials: false
+    origin: '*',
   },
 })
-
 export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisconnect {
-  @WebSocketServer() server: Server; // Objeto de servidor Socket.io
+  @WebSocketServer()
+
+  server: Server;
+
+  constructor(private readonly jwtService: JwtService) { }
 
   /**
-   * Se ejecuta cuando un cliente (Flutter) se conecta por WebSocket.
+   * Se ejecuta cuando un cliente se conecta.
    */
-  handleConnection(client: Socket, ...args: any[]) {
+  handleConnection(client: Socket) {
     console.log(`Cliente conectado: ${client.id}`);
   }
 
   /**
-   * Se ejecuta cuando un cliente (Flutter) se desconecta.
+   * Se ejecuta cuando un cliente se desconecta.
    */
   handleDisconnect(client: Socket) {
     console.log(`Cliente desconectado: ${client.id}`);
-    this.server.emit('driver_disconnected', { id_socket: client.id });
 
-    // Eliminamos el socket de la lista de clientes conectados
+    // Eliminamos el socket del diccionario de clientes conectados
     for (const userId in connectedClients) {
-      connectedClients[userId] = connectedClients[userId].filter(c => c.id !== client.id);
-      if (connectedClients[userId].length === 0) {
+      if (connectedClients[userId].id === client.id) {
         delete connectedClients[userId];
+        console.log(`Usuario ${userId} eliminado de la lista de clientes conectados.`);
+        break; // Salimos del bucle una vez encontrado
       }
     }
-
   }
 
   /**
-   * Endpoint de conexión/autenticación del cliente. 
-   * El cliente debe llamar a esto después de conectarse con su JWT.
+   * Endpoint de autenticación del socket. 
+   * El cliente debe enviar su token JWT para identificarse.
    */
-  @SubscribeMessage('authenticate_user')
-  //handleAuthenticate(client: Socket, payload: { userId: number, roles: string
-  handleAuthenticate(client: Socket, payload: any) {
-    // --- PUNTO DE DEPURACIÓN (para entender el problema) ---
-    console.log('Payload recibido:', payload);
-    console.log('Tipo de payload:', typeof payload);
+  @SubscribeMessage('authenticate')
+  handleAuthenticate(client: Socket, ...args: any[]): void { // <-- CAMBIO #1: Usar '...args'
+    try {
+      // --- PUNTO DE DEPURACIÓN ---
+      console.log('Argumentos recibidos en "authenticate":', args);
 
-    let data: { userId: number, roles: string[] };
+      // 1. Obtenemos el primer argumento, que sabemos que es el payload en formato string.
+      const payloadAsString = args[0];
 
-    // --- ¡AQUÍ ESTÁ LA SOLUCIÓN! ---
-    // Comprobamos si el payload es un string y lo parseamos si es necesario.
-    if (typeof payload === 'string') {
-      try {
-        data = JSON.parse(payload);
-      } catch (error) {
-        console.error('Error al parsear el payload JSON:', error);
-        return; // Detenemos la ejecución si el JSON es inválido
+      // 2. Verificamos que no sea nulo o vacío ANTES de parsearlo.
+      if (!payloadAsString) {
+        throw new Error('Payload vacío recibido.');
       }
-    } else {
-      data = payload; // Si ya es un objeto, lo usamos directamente
-    }
 
-    const { userId, roles } = data;
+      // 3. Convertimos (parseamos) la cadena de texto a un objeto JavaScript.
+      const payloadObject = JSON.parse(payloadAsString);
 
-    // Verificación de seguridad: Asegurarse de que los datos existen después de parsear
-    if (!userId || !roles) {
-      console.error('Payload inválido después de parsear. Faltan userId o roles.');
-      return;
-    }
-    // 1. Asignar el socket al ID de usuario para mensajes privados
-    if (!connectedClients[userId]) {
-      connectedClients[userId] = [];
-    }
-    connectedClients[userId].push(client);
+      // 4. AHORA SÍ, verificamos la propiedad .token en el OBJETO.
+      if (!payloadObject.token) {
+        throw new UnauthorizedException('Token no proporcionado en el payload.');
+      }
 
-    // 2. Unir el socket a las 'salas' de notificaciones
-    client.join(`user_${userId}`); // Sala privada para el usuario (para notificaciones directas)
+      const decodedPayload: JwtPayload = this.jwtService.verify(payloadObject.token);
+      const userId = decodedPayload.sub;
+      const roles = decodedPayload.roles;
 
-    // 3. Unir a salas basadas en roles (para notificaciones masivas)
-    if (roles.includes('ADMIN')) {
-      client.join('room_admin');
-    }
-    if (roles.includes('COMPANY_ADMIN')) {
-      client.join('room_company_admin');
-    }
-    // Podrías tener una lógica aquí para unir a salas por companyId si fuera necesario
+      if (!userId || !roles) {
+        throw new UnauthorizedException('Token inválido');
+      }
 
-    console.log(`Usuario ${userId} autenticado en WebSocket. Roles: ${roles.join(', ')}`);
+      // El resto de la lógica no cambia...
+      connectedClients[userId] = client;
+      client.join(`user_${userId}`);
+      if (roles.includes('COMPANY_ADMIN')) {
+        client.join('room_company_admin');
+      }
+
+      console.log(`Usuario ${userId} autenticado en WebSocket. Roles: ${roles.join(', ')}`);
+      client.emit('authenticated', { message: 'Autenticación exitosa.' });
+
+    } catch (error) {
+      console.error('Error de autenticación en WebSocket:', error.message);
+      client.emit('unauthorized', { message: 'Token inválido o expirado.' });
+      client.disconnect();
+    }
   }
 
-  // ----------------------------------------------------------------------
-  // MÉTODOS DE EMISIÓN DE EVENTOS (Llamados desde los servicios)
-  // ----------------------------------------------------------------------
 
   /**
-   * Emite una notificación de nueva solicitud a todos los COMPANY_ADMIN.
-   * @param requestId ID de la nueva solicitud.
+   * Endpoint que recibe la ubicación en tiempo real del conductor.
    */
-  public emitNewServiceRequest(requestId: number) {
-    console.log(`Emitting new_request for: ${requestId}`);
-    // Envía el evento a todos los sockets que están en la sala 'room_company_admin'
+  @SubscribeMessage('update_location')
+  handleLocationUpdate(client: Socket, payload: { shiftId: number; lat: number; lon: number }): void {
+    // Aquí irá la lógica para encontrar al cliente y retransmitirle la ubicación.
+    // Por ahora, solo confirmaremos que recibimos el evento.
+    console.log('Ubicación recibida:', payload);
+    // LÓGICA FUTURA:
+    // const request = await this.serviceRequestsService.findActiveRequestByShift(payload.shiftId);
+    // if (request) { this.emitAmbulanceLocation(request.client.id, payload); }
+  }
+
+
+  // --- MÉTODOS PÚBLICOS PARA SER LLAMADOS DESDE OTROS SERVICIOS ---
+
+  public emitNewServiceRequest(requestId: number): void {
     this.server.to('room_company_admin').emit('new_service_request', {
       message: '¡Nueva solicitud de emergencia pendiente!',
       requestId: requestId,
     });
   }
 
-  /**
-   * Emite las coordenadas de la ambulancia al cliente.
-   * @param clientId ID del cliente que debe recibir la actualización.
-   * @param location Datos de la ubicación.
-   */
-  public emitAmbulanceLocation(clientId: number, location: any) {
-    // Envía el evento a la sala privada del usuario cliente
-    this.server.to(`user_${clientId}`).emit('ambulance_location_updated', location);
-  }
-
-  /**
-   * Endpoint que recibe la ubicación en tiempo real del conductor.
-   */
-  @SubscribeMessage('update_location')
-  handleLocationUpdate(client: Socket, payload: { shiftId: number, lat: number, lon: number }) {
-    const { shiftId, lat, lon } = payload;
-
-    // 1. Simular la lógica para saber a qué cliente enviársela.
-    //    En un sistema real, este código haría una consulta rápida a la BD para 
-    //    ver a qué ServiceRequest (y por lo tanto a qué Cliente) está asignado este shiftId.
-
-    // LÓGICA SIMULADA (La lógica real iría en un servicio inyectado)
-    // Supongamos que la lógica dice que el cliente 14 está esperando.
-    const hardcodedClientId = 14;
-
-    const locationData = {
-      shiftId,
-      lat,
-      lon,
-      timestamp: new Date().toISOString(),
-    };
-
-    // 2. Retransmitir al cliente que está esperando
-    this.emitAmbulanceLocation(hardcodedClientId, locationData);
-
-    // En un sistema real, el código sería:
-    // const request = await this.serviceRequestsService.findActiveRequestByShift(shiftId);
-    // if (request) { this.emitAmbulanceLocation(request.client.id, locationData); }
-  }
-
-  /**
-   * Notifica a un conductor específico que se le ha asignado una nueva misión.
-   * @param driverId - El ID del usuario conductor.
-   * @param request - El objeto completo de la solicitud de servicio.
-   */
-  public emitNewMissionToDriver(driverId: number, request: any) {
+  public emitNewMissionToDriver(driverId: number, request: any): void {
     this.server.to(`user_${driverId}`).emit('new_mission', {
       message: '¡Nueva emergencia asignada!',
       requestDetails: request,
     });
-    console.log(`Notificación 'new_mission' enviada al conductor ${driverId}`);
   }
 
-  /**
-   * Notifica a un cliente específico que su solicitud ha sido aceptada.
-   * @param clientId - El ID del usuario cliente.
-   * @param request - El objeto completo de la solicitud de servicio (con datos del turno).
-   */
-  public emitRequestAssignedToClient(clientId: number, request: any) {
+  public emitRequestAssignedToClient(clientId: number, request: any): void {
     this.server.to(`user_${clientId}`).emit('request_assigned', {
       message: '¡Tu ambulancia ha sido asignada y está en camino!',
       requestDetails: request,
     });
-    console.log(`Notificación 'request_assigned' enviada al cliente ${clientId}`);
   }
 
-
+  public emitAmbulanceLocation(clientId: number, location: any): void {
+    this.server.to(`user_${clientId}`).emit('ambulance_location_updated', location);
+  }
 }
