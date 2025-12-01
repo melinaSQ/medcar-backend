@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { NotificationsGateway } from './notifications.gateway';
 import { JwtModule } from '@nestjs/jwt';
 import { jwtConstants } from 'src/auth/jwt/jwt.constants';
+import { ServiceRequestsModule } from 'src/service_requests/service_requests.module';
+
 
 @Module({
   imports: [
@@ -10,6 +12,7 @@ import { jwtConstants } from 'src/auth/jwt/jwt.constants';
       secret: jwtConstants.secret,// Debe ser EL MISMO secreto que en AuthModule
       signOptions: { expiresIn: '2d' },
     }),
+    ServiceRequestsModule,
   ],
   providers: [NotificationsGateway],
   exports: [NotificationsGateway],

@@ -28,6 +28,8 @@ export class ServiceRequestsService {
         console.log('Datos recibidos (DTO):', createDto);
         console.log('ID del Cliente:', clientId);
 
+
+
         // Validar si el cliente ya tiene una solicitud activa
         try {
             console.log('--- 2. BUSCANDO SOLICITUDES ACTIVAS ---');
@@ -78,6 +80,9 @@ export class ServiceRequestsService {
 
             console.log('--- 6. ¡GUARDADO CON ÉXITO! ---');
             console.log('TODO: Notificar a los admins por WebSocket sobre la nueva solicitud:', savedRequest.id);
+
+            // REEMPLAZA EL CONSOLE.LOG CON ESTO:
+            this.notificationsGateway.emitNewServiceRequest(savedRequest); // Envía el objeto completo, es más útil
 
             return savedRequest;
 
@@ -168,6 +173,60 @@ export class ServiceRequestsService {
             this.notificationsGateway.emitRequestAssignedToClient(request.client.id, updatedRequest);
 
             console.log(`TODO: Notificar al cliente y al conductor sobre la asignación.`);
+        }
+
+        return updatedRequest;
+    }
+
+    /**
+   * Encuentra la solicitud activa asociada a un turno específico.
+   * @param shiftId El ID del turno.
+   * @returns La entidad ServiceRequest con la relación de cliente cargada.
+   */
+    async findActiveRequestByShift(shiftId: number): Promise<ServiceRequest | null> {
+        return this.serviceRequestRepository.findOne({
+            where: {
+                shift: { id: shiftId },
+                status: In([
+                    ServiceRequestStatus.ASSIGNED,
+                    ServiceRequestStatus.ON_THE_WAY,
+                    ServiceRequestStatus.ON_SITE,
+                    ServiceRequestStatus.TRAVELLING,
+                ]),
+            },
+            relations: ['client'], // ¡Crucial para obtener el ID del cliente!
+        });
+    }
+
+    /**
+   * Actualiza el estado de una solicitud de servicio.
+   * Utilizado por el conductor para notificar su progreso.
+   * @param requestId - ID de la solicitud a actualizar.
+   * @param newStatus - El nuevo estado.
+   * @param driverId - ID del conductor que realiza la acción (para seguridad).
+   * @returns La solicitud actualizada.
+   */
+    async updateStatus(requestId: number, newStatus: ServiceRequestStatus, driverId: number): Promise<ServiceRequest> {
+        // 1. Busca la solicitud, asegurándose de que le pertenece al conductor que hace la petición.
+        const request = await this.serviceRequestRepository.findOne({
+            where: {
+                id: requestId,
+                shift: { driver: { id: driverId } },
+            },
+            relations: ['client', 'shift', 'shift.driver'],
+        });
+
+        if (!request) {
+            throw new NotFoundException(`No se encontró una solicitud activa con ID ${requestId} para este conductor.`);
+        }
+
+        // 2. Actualiza el estado y guarda.
+        request.status = newStatus;
+        const updatedRequest = await this.serviceRequestRepository.save(request);
+
+        // 3. Notifica al cliente sobre el cambio de estado.
+        if (updatedRequest.client) {
+            this.notificationsGateway.emitRequestStatusUpdate(updatedRequest.client.id, updatedRequest);
         }
 
         return updatedRequest;

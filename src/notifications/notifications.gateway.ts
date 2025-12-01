@@ -4,6 +4,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { JwtPayload } from 'src/auth/jwt/jwt.strategy'; // Asegúrate de que este path sea correcto
 import { WebSocketGateway, SubscribeMessage, WebSocketServer, OnGatewayConnection, OnGatewayDisconnect } from '@nestjs/websockets';
+import { ServiceRequestsService } from 'src/service_requests/service_requests.service';
 
 // Este diccionario debe estar FUERA de la clase para que sea un estado global del servidor
 const connectedClients: { [userId: number]: Socket } = {};
@@ -19,7 +20,10 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
 
   server: Server;
 
-  constructor(private readonly jwtService: JwtService) { }
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly serviceRequestsService: ServiceRequestsService,
+  ) { }
 
   /**
    * Se ejecuta cuando un cliente se conecta.
@@ -100,22 +104,30 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
    * Endpoint que recibe la ubicación en tiempo real del conductor.
    */
   @SubscribeMessage('update_location')
-  handleLocationUpdate(client: Socket, payload: { shiftId: number; lat: number; lon: number }): void {
-    // Aquí irá la lógica para encontrar al cliente y retransmitirle la ubicación.
-    // Por ahora, solo confirmaremos que recibimos el evento.
-    console.log('Ubicación recibida:', payload);
-    // LÓGICA FUTURA:
-    // const request = await this.serviceRequestsService.findActiveRequestByShift(payload.shiftId);
-    // if (request) { this.emitAmbulanceLocation(request.client.id, payload); }
+  async handleLocationUpdate(client: Socket, payload: { shiftId: number; lat: number; lon: number }): Promise<void> {
+    const { shiftId, lat, lon } = payload;
+
+    // ¡LÓGICA REAL!
+    // 1. Buscamos la solicitud activa para este turno.
+    const request = await this.serviceRequestsService.findActiveRequestByShift(shiftId);
+
+    // 2. Si existe una solicitud activa y tiene un cliente asociado...
+    if (request && request.client) {
+      const locationData = { shiftId, lat, lon, timestamp: new Date().toISOString() };
+
+      // 3. ...retransmitimos la ubicación a ese cliente específico.
+      this.emitAmbulanceLocation(request.client.id, locationData);
+    }
   }
 
 
   // --- MÉTODOS PÚBLICOS PARA SER LLAMADOS DESDE OTROS SERVICIOS ---
 
-  public emitNewServiceRequest(requestId: number): void {
+  public emitNewServiceRequest(request: any) { // <-- Aceptamos el objeto completo
+    console.log(`Emitting new_request for: ${request.id}`);
     this.server.to('room_company_admin').emit('new_service_request', {
       message: '¡Nueva solicitud de emergencia pendiente!',
-      requestId: requestId,
+      request: request, // <-- Enviamos el objeto completo al frontend
     });
   }
 
@@ -135,5 +147,12 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
 
   public emitAmbulanceLocation(clientId: number, location: any): void {
     this.server.to(`user_${clientId}`).emit('ambulance_location_updated', location);
+  }
+
+  public emitRequestStatusUpdate(clientId: number, request: any): void {
+    this.server.to(`user_${clientId}`).emit('request_status_updated', {
+      message: `El estado de tu solicitud ahora es: ${request.status}`,
+      requestDetails: request,
+    });
   }
 }

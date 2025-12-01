@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Post, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Request, UseGuards } from '@nestjs/common';
 import { CreateServiceRequestDto } from './dto/create-service-request.dto';
 import { Rol } from 'src/common/enums/rol.enum';
 import { AssignRequestDto } from './dto/assign-request.dto';
@@ -6,6 +6,7 @@ import { JwtAuthGuard } from 'src/auth/jwt/jwt-auth.guard';
 import { ServiceRequestsService } from './service_requests.service';
 import { JwtRolesGuard } from 'src/auth/jwt/jwt-roles.guard';
 import { HasRoles } from 'src/auth/jwt/jwt-roles.decorator';
+import { UpdateStatusDto } from './dto/update-status.dto';
 
 @Controller('service-requests')
 @UseGuards(JwtAuthGuard) // Protegemos todo el controlador con autenticación
@@ -40,5 +41,20 @@ export class ServiceRequestsController {
     assign(@Body() assignDto: AssignRequestDto, @Request() req) {
         const adminUserId = req.user.id;
         return this.serviceRequestsService.assign(assignDto, adminUserId);
+    }
+
+    /**
+   * Endpoint para que un DRIVER actualice el estado de su misión actual.
+   */
+    @Patch(':id/status')
+    @UseGuards(JwtRolesGuard)
+    @HasRoles(Rol.DRIVER)
+    updateStatus(
+        @Param('id', ParseIntPipe) id: number,
+        @Body() updateStatusDto: UpdateStatusDto,
+        @Request() req,
+    ) {
+        const driverId = req.user.id;
+        return this.serviceRequestsService.updateStatus(id, updateStatusDto.status, driverId);
     }
 }
