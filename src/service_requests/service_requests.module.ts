@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { ServiceRequestsService } from './service_requests.service';
 import { ServiceRequestsController } from './service_requests.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -12,10 +12,11 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
 @Module({
   imports: [
     AuthModule,
-    NotificationsModule, 
     TypeOrmModule.forFeature([ServiceRequest, User, Shift, Company]),
+    forwardRef(() => NotificationsModule),
   ],
   providers: [ServiceRequestsService],
-  controllers: [ServiceRequestsController]
+  controllers: [ServiceRequestsController],
+  exports: [ServiceRequestsService],
 })
 export class ServiceRequestsModule {}

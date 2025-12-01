@@ -5,7 +5,6 @@ import { Shift } from "src/shifts/shift.entity";
 import { User } from "src/users/user.entity";
 import { BeforeInsert, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToMany, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import type { Point } from 'geojson';
-//import { Rating } from "../../ratings/entities/rating.entity"; // Importaremos esto en el futuro
 
 const pointTransformer = {
     to: (value: Point): string => {

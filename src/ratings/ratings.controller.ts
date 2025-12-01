@@ -1,7 +1,9 @@
-import { Body, Controller, Post, UseGuards, Request } from '@nestjs/common';
+// src/ratings/ratings.controller.ts
+
+import { Body, Controller, Post, Request, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/auth/jwt/jwt-auth.guard';
-import { RatingsService } from './ratings.service';
 import { CreateRatingDto } from './dto/create-rating.dto';
+import { RatingsService } from './ratings.service';
 
 @Controller('ratings')
 @UseGuards(JwtAuthGuard)
