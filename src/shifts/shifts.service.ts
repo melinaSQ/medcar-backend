@@ -140,4 +140,22 @@ export class ShiftsService {
 
         return updatedShift;
     }
+
+    /**
+     * Obtiene todos los turnos activos de la compañía del admin.
+     */
+    async findActiveShiftsByCompany(adminUserId: number): Promise<Shift[]> {
+        const company = await this.companyRepository.findOneBy({ user: { id: adminUserId } });
+        if (!company) {
+            throw new UnauthorizedException('Usuario no autorizado.');
+        }
+
+        return this.shiftRepository.find({
+            where: {
+                isActive: true,
+                ambulance: { company: { id: company.id } },
+            },
+            relations: ['driver', 'ambulance'],
+        });
+    }
 }

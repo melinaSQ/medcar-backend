@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Get, Body, UseGuards, Request } from '@nestjs/common';
 import { ShiftsService } from './shifts.service';
 import { JwtAuthGuard } from 'src/auth/jwt/jwt-auth.guard';
 import { JwtRolesGuard } from 'src/auth/jwt/jwt-roles.guard';
@@ -43,5 +43,15 @@ export class ShiftsController {
         // Obtenemos el ID del conductor directamente del token JWT validado.
         const driverId = req.user.id;
         return this.shiftsService.endShift(driverId);
+    }
+
+    /**
+     * Endpoint para que un COMPANY_ADMIN vea los turnos activos de su compañía.
+     */
+    @Get('active')
+    @HasRoles(Rol.COMPANY_ADMIN)
+    findActiveShifts(@Request() req) {
+        const adminUserId = req.user.id;
+        return this.shiftsService.findActiveShiftsByCompany(adminUserId);
     }
 }
