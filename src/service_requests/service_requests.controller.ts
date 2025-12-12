@@ -57,4 +57,13 @@ export class ServiceRequestsController {
         const driverId = req.user.id;
         return this.serviceRequestsService.updateStatus(id, updateStatusDto.status, driverId);
     }
+
+    /**
+     * Endpoint para que un cliente cancele su solicitud de emergencia.
+     */
+    @Patch(':id/cancel')
+    cancel(@Param('id', ParseIntPipe) id: number, @Request() req) {
+        const clientId = req.user.id;
+        return this.serviceRequestsService.cancel(id, clientId);
+    }
 }

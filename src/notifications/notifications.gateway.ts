@@ -108,4 +108,11 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
       requestDetails: request,
     });
   }
+
+  public emitRequestCanceledToDriver(driverId: number, request: any): void {
+    this.server.to(`user_${driverId}`).emit('request_canceled', {
+      message: 'La solicitud de emergencia ha sido cancelada por el cliente.',
+      requestDetails: request,
+    });
+  }
 }

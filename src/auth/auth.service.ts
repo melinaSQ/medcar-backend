@@ -56,7 +56,7 @@ export class AuthService {
      * @param loginData - El DTO con email y password.
      * @returns Un objeto con el token de acceso.
      */
-    async login(loginData: LoginAuthDto): Promise<{ accessToken: string }> {
+    async login(loginData: LoginAuthDto): Promise<{ user: any, accessToken: string }> {
         // Primero, validamos al usuario.
         const user = await this.validateUser(loginData.email, loginData.password);
 
@@ -82,6 +82,7 @@ export class AuthService {
         return data;
         */
         return {
+            user: user,
             accessToken: accessToken,
             //accessToken: 'Bearer ' + accessToken,
         };

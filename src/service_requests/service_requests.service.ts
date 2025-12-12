@@ -131,4 +131,30 @@ export class ServiceRequestsService {
 
         return updatedRequest;
     }
+
+    async cancel(requestId: number, clientId: number): Promise<ServiceRequest> {
+        const request = await this.serviceRequestRepository.findOne({
+            where: { id: requestId, client: { id: clientId } },
+            relations: ['client', 'shift', 'shift.driver'],
+        });
+
+        if (!request) {
+            throw new NotFoundException(`Solicitud con ID ${requestId} no encontrada.`);
+        }
+
+        // Solo permite cancelar si está en SEARCHING o ASSIGNED
+        if (![ServiceRequestStatus.SEARCHING, ServiceRequestStatus.ASSIGNED].includes(request.status)) {
+            throw new ConflictException('No se puede cancelar esta solicitud en su estado actual.');
+        }
+
+        request.status = ServiceRequestStatus.CANCELED;
+        const updatedRequest = await this.serviceRequestRepository.save(request);
+
+        // Notificar al conductor si estaba asignado
+        if (request.shift?.driver?.id) {
+            this.notificationsGateway.emitRequestCanceledToDriver(request.shift.driver.id, updatedRequest);
+        }
+
+        return updatedRequest;
+    }
 }
