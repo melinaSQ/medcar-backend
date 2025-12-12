@@ -66,4 +66,24 @@ export class ServiceRequestsController {
         const clientId = req.user.id;
         return this.serviceRequestsService.cancel(id, clientId);
     }
+
+    /**
+     * Endpoint para obtener la solicitud activa del cliente actual.
+     */
+    @Get('my-active')
+    findMyActiveRequest(@Request() req) {
+        const clientId = req.user.id;
+        return this.serviceRequestsService.findActiveRequestByClient(clientId);
+    }
+
+    /**
+     * Endpoint para obtener la solicitud activa del conductor actual.
+     */
+    @Get('driver-active')
+    @UseGuards(JwtRolesGuard)
+    @HasRoles(Rol.DRIVER)
+    findDriverActiveRequest(@Request() req) {
+        const driverId = req.user.id;
+        return this.serviceRequestsService.findActiveRequestByDriver(driverId);
+    }
 }

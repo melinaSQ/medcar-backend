@@ -142,20 +142,33 @@ export class ShiftsService {
     }
 
     /**
-     * Obtiene todos los turnos activos de la compañía del admin.
+     * Obtiene todos los turnos activos de la compañía del admin con información de emergencia.
      */
-    async findActiveShiftsByCompany(adminUserId: number): Promise<Shift[]> {
+    async findActiveShiftsByCompany(adminUserId: number): Promise<any[]> {
         const company = await this.companyRepository.findOneBy({ user: { id: adminUserId } });
         if (!company) {
             throw new UnauthorizedException('Usuario no autorizado.');
         }
 
-        return this.shiftRepository.find({
+        const shifts = await this.shiftRepository.find({
             where: {
                 isActive: true,
                 ambulance: { company: { id: company.id } },
             },
-            relations: ['driver', 'ambulance'],
+            relations: ['driver', 'ambulance', 'serviceRequests'],
+        });
+
+        // Agregar información sobre si tiene emergencia activa
+        return shifts.map(shift => {
+            const activeRequest = shift.serviceRequests?.find(sr => 
+                ['ASSIGNED', 'ON_THE_WAY', 'ON_SITE', 'TRAVELLING'].includes(sr.status)
+            );
+            return {
+                ...shift,
+                hasActiveEmergency: !!activeRequest,
+                emergencyStatus: activeRequest?.status || null,
+                serviceRequests: undefined, // No enviar todas las solicitudes
+            };
         });
     }
 }

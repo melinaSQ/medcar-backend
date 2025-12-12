@@ -132,6 +132,33 @@ export class ServiceRequestsService {
         return updatedRequest;
     }
 
+    async findActiveRequestByClient(clientId: number): Promise<ServiceRequest | null> {
+        return this.serviceRequestRepository.findOne({
+            where: {
+                client: { id: clientId },
+                status: In([
+                    ServiceRequestStatus.SEARCHING, ServiceRequestStatus.ASSIGNED,
+                    ServiceRequestStatus.ON_THE_WAY, ServiceRequestStatus.ON_SITE,
+                    ServiceRequestStatus.TRAVELLING,
+                ]),
+            },
+            relations: ['shift', 'shift.ambulance', 'shift.driver'],
+        });
+    }
+
+    async findActiveRequestByDriver(driverId: number): Promise<ServiceRequest | null> {
+        return this.serviceRequestRepository.findOne({
+            where: {
+                shift: { driver: { id: driverId } },
+                status: In([
+                    ServiceRequestStatus.ASSIGNED, ServiceRequestStatus.ON_THE_WAY,
+                    ServiceRequestStatus.ON_SITE, ServiceRequestStatus.TRAVELLING,
+                ]),
+            },
+            relations: ['client', 'shift', 'shift.ambulance'],
+        });
+    }
+
     async cancel(requestId: number, clientId: number): Promise<ServiceRequest> {
         const request = await this.serviceRequestRepository.findOne({
             where: { id: requestId, client: { id: clientId } },
