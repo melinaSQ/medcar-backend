@@ -70,9 +70,14 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
 
   @SubscribeMessage('update_location')
   async handleLocationUpdate(client: Socket, payload: { shiftId: number; lat: number; lon: number }): Promise<void> {
+    console.log(`📍 Ubicación recibida: shiftId=${payload.shiftId}, lat=${payload.lat}, lon=${payload.lon}`);
+    
     const request = await this.serviceRequestsService.findActiveRequestByShift(payload.shiftId);
+    console.log(`📍 Solicitud activa para shift ${payload.shiftId}:`, request ? `ID ${request.id}, clientId ${request.client?.id}` : 'No encontrada');
+    
     if (request && request.client) {
       const locationData = { ...payload, timestamp: new Date().toISOString() };
+      console.log(`📍 Enviando ubicación a cliente ${request.client.id}`);
       this.emitAmbulanceLocation(request.client.id, locationData);
     }
   }
@@ -92,8 +97,15 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   }
 
   public emitRequestAssignedToClient(clientId: number, request: any): void {
+    // Notificar al cliente
     this.server.to(`user_${clientId}`).emit('request_assigned', {
       message: '¡Tu ambulancia ha sido asignada!',
+      requestDetails: request,
+    });
+    
+    // Notificar también a los admins para actualización en tiempo real
+    this.server.to('room_company_admin').emit('request_assigned', {
+      message: 'Solicitud asignada',
       requestDetails: request,
     });
   }
@@ -103,15 +115,29 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   }
 
   public emitRequestStatusUpdate(clientId: number, request: any): void {
+    // Notificar al cliente
     this.server.to(`user_${clientId}`).emit('request_status_updated', {
       message: `El estado de tu solicitud ahora es: ${request.status}`,
+      requestDetails: request,
+    });
+    
+    // Notificar también a los admins para actualización en tiempo real
+    this.server.to('room_company_admin').emit('request_status_updated', {
+      message: `Estado actualizado: ${request.status}`,
       requestDetails: request,
     });
   }
 
   public emitRequestCanceledToDriver(driverId: number, request: any): void {
+    // Notificar al conductor
     this.server.to(`user_${driverId}`).emit('request_canceled', {
       message: 'La solicitud de emergencia ha sido cancelada por el cliente.',
+      requestDetails: request,
+    });
+    
+    // Notificar también a los admins para actualización en tiempo real
+    this.server.to('room_company_admin').emit('request_canceled', {
+      message: 'Solicitud cancelada',
       requestDetails: request,
     });
   }

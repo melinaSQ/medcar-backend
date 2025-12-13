@@ -54,4 +54,31 @@ export class ShiftsController {
         const adminUserId = req.user.id;
         return this.shiftsService.findActiveShiftsByCompany(adminUserId);
     }
+
+    /**
+     * Endpoint para que un DRIVER obtenga su turno activo (si existe).
+     */
+    @Get('my-active')
+    @HasRoles(Rol.DRIVER)
+    async findMyActiveShift(@Request() req) {
+        const driverId = req.user.id;
+        const shift = await this.shiftsService.findActiveShiftByDriver(driverId);
+        
+        if (!shift) {
+            return null;
+        }
+        
+        // Incluir información de la misión activa si existe
+        const activeRequest = shift.serviceRequests?.find(sr => 
+            ['ASSIGNED', 'ON_THE_WAY', 'ON_SITE', 'TRAVELLING'].includes(sr.status)
+        );
+        
+        return {
+            id: shift.id,
+            startTime: shift.startTime,
+            isActive: shift.isActive,
+            ambulance: shift.ambulance,
+            activeMission: activeRequest || null,
+        };
+    }
 }

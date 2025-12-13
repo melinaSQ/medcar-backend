@@ -142,6 +142,19 @@ export class ShiftsService {
     }
 
     /**
+     * Obtiene el turno activo de un conductor (si existe).
+     */
+    async findActiveShiftByDriver(driverId: number): Promise<Shift | null> {
+        return this.shiftRepository.findOne({
+            where: {
+                driver: { id: driverId },
+                isActive: true,
+            },
+            relations: ['ambulance', 'serviceRequests', 'serviceRequests.client'],
+        });
+    }
+
+    /**
      * Obtiene todos los turnos activos de la compañía del admin con información de emergencia.
      */
     async findActiveShiftsByCompany(adminUserId: number): Promise<any[]> {
