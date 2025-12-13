@@ -55,4 +55,50 @@ export class RatingsService {
 
     return this.ratingRepository.save(newRating);
   }
+
+  /**
+   * Verifica si un usuario ya calificó un servicio específico
+   */
+  async checkIfUserRated(serviceRequestId: number, raterId: number): Promise<{ hasRated: boolean; rating?: Rating }> {
+    const existingRating = await this.ratingRepository.findOne({
+      where: {
+        serviceRequest: { id: serviceRequestId },
+        rater: { id: raterId },
+      },
+    });
+
+    return {
+      hasRated: !!existingRating,
+      rating: existingRating || undefined,
+    };
+  }
+
+  /**
+   * Obtiene el promedio de calificaciones de un usuario
+   */
+  async getAverageRating(userId: number): Promise<{ average: number; count: number }> {
+    const result = await this.ratingRepository
+      .createQueryBuilder('rating')
+      .select('AVG(rating.score)', 'average')
+      .addSelect('COUNT(rating.id)', 'count')
+      .where('rating.rated_user_id = :userId', { userId })
+      .getRawOne();
+
+    return {
+      average: result.average ? parseFloat(result.average) : 0,
+      count: parseInt(result.count) || 0,
+    };
+  }
+
+  /**
+   * Obtiene las calificaciones recibidas por un usuario
+   */
+  async getRatingsReceived(userId: number): Promise<Rating[]> {
+    return this.ratingRepository.find({
+      where: { rated: { id: userId } },
+      relations: ['rater', 'serviceRequest'],
+      order: { createdAt: 'DESC' },
+      take: 20, // Últimas 20 calificaciones
+    });
+  }
 }
