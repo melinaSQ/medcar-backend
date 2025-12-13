@@ -1,7 +1,10 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from 'src/auth/jwt/jwt-auth.guard';
+import { JwtRolesGuard } from 'src/auth/jwt/jwt-roles.guard';
+import { HasRoles } from 'src/auth/jwt/jwt-roles.decorator';
+import { Rol } from 'src/common/enums/rol.enum';
 
 //Aqui van los endpoints para manejar las solicitudes HTTP relacionadas con los usuarios
 //definimos rutas y metodos para manejar las solicitudes
@@ -32,5 +35,47 @@ export class UsersController {
         return this.usersService.findAll();
     }
 
+    /**
+     * Buscar usuario por email (para asignarlo como conductor)
+     */
+    @Get('search')
+    @UseGuards(JwtAuthGuard, JwtRolesGuard)
+    @HasRoles(Rol.COMPANY_ADMIN)
+    findByEmail(@Query('email') email: string, @Request() req) {
+        const adminUserId = req.user.id;
+        return this.usersService.findUserByEmailForAdmin(email, adminUserId);
+    }
 
+    /**
+     * Obtener todos los conductores
+     */
+    @Get('drivers')
+    @UseGuards(JwtAuthGuard, JwtRolesGuard)
+    @HasRoles(Rol.COMPANY_ADMIN)
+    findAllDrivers(@Request() req) {
+        const adminUserId = req.user.id;
+        return this.usersService.findAllDrivers(adminUserId);
+    }
+
+    /**
+     * Asignar rol de conductor a un usuario
+     */
+    @Post(':id/assign-driver')
+    @UseGuards(JwtAuthGuard, JwtRolesGuard)
+    @HasRoles(Rol.COMPANY_ADMIN)
+    assignDriverRole(@Param('id') userId: number, @Request() req) {
+        const adminUserId = req.user.id;
+        return this.usersService.assignDriverRole(userId, adminUserId);
+    }
+
+    /**
+     * Quitar rol de conductor a un usuario
+     */
+    @Post(':id/remove-driver')
+    @UseGuards(JwtAuthGuard, JwtRolesGuard)
+    @HasRoles(Rol.COMPANY_ADMIN)
+    removeDriverRole(@Param('id') userId: number, @Request() req) {
+        const adminUserId = req.user.id;
+        return this.usersService.removeDriverRole(userId, adminUserId);
+    }
 }
