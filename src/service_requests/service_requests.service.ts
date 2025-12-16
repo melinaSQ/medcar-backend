@@ -184,4 +184,53 @@ export class ServiceRequestsService {
 
         return updatedRequest;
     }
+
+    /**
+     * Obtiene el historial de servicios del cliente (completados y cancelados)
+     */
+    async getClientHistory(clientId: number): Promise<ServiceRequest[]> {
+        return this.serviceRequestRepository.find({
+            where: {
+                client: { id: clientId },
+                status: In([ServiceRequestStatus.COMPLETED, ServiceRequestStatus.CANCELED]),
+            },
+            relations: ['shift', 'shift.ambulance', 'shift.driver'],
+            order: { createdAt: 'DESC' },
+        });
+    }
+
+    /**
+     * Obtiene el historial de servicios del conductor (completados)
+     */
+    async getDriverHistory(driverId: number): Promise<ServiceRequest[]> {
+        return this.serviceRequestRepository.find({
+            where: {
+                shift: { driver: { id: driverId } },
+                status: ServiceRequestStatus.COMPLETED,
+            },
+            relations: ['client', 'shift', 'shift.ambulance'],
+            order: { createdAt: 'DESC' },
+        });
+    }
+
+    /**
+     * Obtiene el historial de servicios de la empresa (admin)
+     */
+    async getCompanyHistory(adminUserId: number): Promise<ServiceRequest[]> {
+        const adminCompany = await this.companyRepository.findOneBy({ user: { id: adminUserId } });
+        if (!adminCompany) {
+            throw new UnauthorizedException('No estás autorizado para ver el historial de servicios.');
+        }
+
+        return this.serviceRequestRepository.find({
+            where: {
+                shift: {
+                    ambulance: { company: { id: adminCompany.id } },
+                },
+                status: In([ServiceRequestStatus.COMPLETED, ServiceRequestStatus.CANCELED]),
+            },
+            relations: ['client', 'shift', 'shift.ambulance', 'shift.driver'],
+            order: { createdAt: 'DESC' },
+        });
+    }
 }

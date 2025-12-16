@@ -86,4 +86,35 @@ export class ServiceRequestsController {
         const driverId = req.user.id;
         return this.serviceRequestsService.findActiveRequestByDriver(driverId);
     }
+
+    /**
+     * Endpoint para obtener el historial de servicios del cliente.
+     */
+    @Get('my-history')
+    getMyHistory(@Request() req) {
+        const clientId = req.user.id;
+        return this.serviceRequestsService.getClientHistory(clientId);
+    }
+
+    /**
+     * Endpoint para obtener el historial de servicios del conductor.
+     */
+    @Get('driver-history')
+    @UseGuards(JwtRolesGuard)
+    @HasRoles(Rol.DRIVER)
+    getDriverHistory(@Request() req) {
+        const driverId = req.user.id;
+        return this.serviceRequestsService.getDriverHistory(driverId);
+    }
+
+    /**
+     * Endpoint para obtener el historial de servicios de la empresa.
+     */
+    @Get('company-history')
+    @UseGuards(JwtRolesGuard)
+    @HasRoles(Rol.COMPANY_ADMIN)
+    getCompanyHistory(@Request() req) {
+        const adminUserId = req.user.id;
+        return this.serviceRequestsService.getCompanyHistory(adminUserId);
+    }
 }
