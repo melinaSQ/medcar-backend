@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Ambulance } from './ambulance.entity';
 import { Company } from 'src/companies/company.entity';
 import { CreateAmbulanceDto } from './dto/create-ambulance.dto';
+import { AmbulanceStatus } from 'src/common/enums/ambulance-status.enum';
 
 @Injectable()
 export class AmbulancesService {
@@ -63,6 +64,80 @@ export class AmbulancesService {
                 company: { id: company.id },
             },
         });
+    }
+
+    /**
+     * Actualiza una ambulancia existente.
+     * Solo el admin de la compañía propietaria puede actualizarla.
+     */
+    async update(ambulanceId: number, updateData: Partial<CreateAmbulanceDto>, userId: number): Promise<Ambulance> {
+        const company = await this.companyRepository.findOne({
+            where: { user: { id: userId } },
+        });
+
+        if (!company) {
+            throw new UnauthorizedException('Este usuario no administra ninguna compañía.');
+        }
+
+        const ambulance = await this.ambulanceRepository.findOne({
+            where: { id: ambulanceId, company: { id: company.id } },
+        });
+
+        if (!ambulance) {
+            throw new NotFoundException('Ambulancia no encontrada o no pertenece a tu compañía.');
+        }
+
+        // Actualizar los campos
+        Object.assign(ambulance, updateData);
+        return this.ambulanceRepository.save(ambulance);
+    }
+
+    /**
+     * Actualiza el estado de una ambulancia.
+     */
+    async updateStatus(ambulanceId: number, status: AmbulanceStatus, userId: number): Promise<Ambulance> {
+        const company = await this.companyRepository.findOne({
+            where: { user: { id: userId } },
+        });
+
+        if (!company) {
+            throw new UnauthorizedException('Este usuario no administra ninguna compañía.');
+        }
+
+        const ambulance = await this.ambulanceRepository.findOne({
+            where: { id: ambulanceId, company: { id: company.id } },
+        });
+
+        if (!ambulance) {
+            throw new NotFoundException('Ambulancia no encontrada o no pertenece a tu compañía.');
+        }
+
+        ambulance.status = status;
+        return this.ambulanceRepository.save(ambulance);
+    }
+
+    /**
+     * Elimina una ambulancia.
+     * Solo el admin de la compañía propietaria puede eliminarla.
+     */
+    async remove(ambulanceId: number, userId: number): Promise<void> {
+        const company = await this.companyRepository.findOne({
+            where: { user: { id: userId } },
+        });
+
+        if (!company) {
+            throw new UnauthorizedException('Este usuario no administra ninguna compañía.');
+        }
+
+        const ambulance = await this.ambulanceRepository.findOne({
+            where: { id: ambulanceId, company: { id: company.id } },
+        });
+
+        if (!ambulance) {
+            throw new NotFoundException('Ambulancia no encontrada o no pertenece a tu compañía.');
+        }
+
+        await this.ambulanceRepository.remove(ambulance);
     }
 
 }
