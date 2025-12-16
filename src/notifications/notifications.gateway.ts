@@ -141,4 +141,41 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
       requestDetails: request,
     });
   }
+
+  /**
+   * Emite un evento cuando se crea una nueva calificación
+   * Notifica al conductor calificado y al admin de la empresa
+   */
+  public emitRatingCreated(rating: any): void {
+    console.log('⭐ Emitiendo evento rating_created:', JSON.stringify(rating, null, 2));
+    const ratedUserId = rating.rated?.id || rating.rated_user_id;
+    const companyUserId = rating.serviceRequest?.shift?.ambulance?.company?.user?.id;
+
+    console.log(`⭐ ratedUserId: ${ratedUserId}, companyUserId: ${companyUserId}`);
+
+    // Notificar al usuario calificado (conductor)
+    if (ratedUserId) {
+      console.log(`⭐ Enviando rating_created a user_${ratedUserId}`);
+      this.server.to(`user_${ratedUserId}`).emit('rating_created', {
+        message: 'Has recibido una nueva calificación',
+        rating: rating,
+      });
+    }
+
+    // Notificar al admin de la empresa para actualizar promedios
+    if (companyUserId) {
+      console.log(`⭐ Enviando rating_created a user_${companyUserId} y room_company_admin`);
+      this.server.to(`user_${companyUserId}`).emit('rating_created', {
+        message: 'Nueva calificación recibida',
+        rating: rating,
+      });
+      // También emitir a la sala de admins
+      this.server.to('room_company_admin').emit('rating_created', {
+        message: 'Nueva calificación recibida',
+        rating: rating,
+      });
+    } else {
+      console.log('⚠️ companyUserId es null o undefined');
+    }
+  }
 }

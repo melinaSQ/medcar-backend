@@ -41,4 +41,23 @@ export class RatingsController {
     const userId = req.user.id;
     return this.ratingsService.getRatingsReceived(userId);
   }
+
+  /**
+   * Obtiene el promedio de calificaciones de la empresa del usuario autenticado
+   * Basado en las calificaciones de todos sus conductores
+   */
+  @Get('company-average')
+  getCompanyAverageRating(@Request() req) {
+    const companyUserId = req.user.id;
+    return this.ratingsService.getCompanyAverageRating(companyUserId);
+  }
+
+  /**
+   * Obtiene el promedio de calificaciones de una empresa específica por su userId
+   * Puede ser llamado por cualquier usuario autenticado
+   */
+  @Get('company-average/:companyUserId')
+  getCompanyAverageRatingByUserId(@Param('companyUserId') companyUserId: number) {
+    return this.ratingsService.getCompanyAverageRating(companyUserId);
+  }
 }

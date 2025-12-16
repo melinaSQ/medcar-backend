@@ -1,12 +1,13 @@
 // src/ratings/ratings.service.ts
 
-import { ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, forwardRef, Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateRatingDto } from './dto/create-rating.dto';
 import { Rating } from './rating.entity';
 import { ServiceRequest } from 'src/service_requests/service_request.entity';
 import { ServiceRequestStatus } from 'src/common/enums/service-request-status.enum';
+import { NotificationsGateway } from 'src/notifications/notifications.gateway';
 
 @Injectable()
 export class RatingsService {
@@ -15,6 +16,8 @@ export class RatingsService {
     private readonly ratingRepository: Repository<Rating>,
     @InjectRepository(ServiceRequest)
     private readonly requestRepository: Repository<ServiceRequest>,
+    @Inject(forwardRef(() => NotificationsGateway))
+    private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
   async create(createRatingDto: CreateRatingDto, raterId: number): Promise<Rating> {
@@ -38,8 +41,10 @@ export class RatingsService {
 
     let ratedId: number;
     if (raterId === request.client.id) {
-      ratedId = request.shift.ambulance.company.user.id;
+      // Cliente califica al CONDUCTOR (individual)
+      ratedId = request.shift.driver.id;
     } else if (raterId === request.shift.ambulance.company.user.id) {
+      // Empresa califica al cliente
       ratedId = request.client.id;
     } else {
       throw new UnauthorizedException('No puedes calificar este servicio.');
@@ -53,7 +58,24 @@ export class RatingsService {
       rated: { id: ratedId },
     });
 
-    return this.ratingRepository.save(newRating);
+    const savedRating = await this.ratingRepository.save(newRating);
+
+    // Cargar relaciones para el evento WebSocket
+    const ratingWithRelations = await this.ratingRepository.findOne({
+      where: { id: savedRating.id },
+      relations: ['rater', 'rated', 'serviceRequest', 'serviceRequest.shift', 'serviceRequest.shift.driver', 'serviceRequest.shift.ambulance', 'serviceRequest.shift.ambulance.company', 'serviceRequest.shift.ambulance.company.user'],
+    });
+
+    console.log('⭐ Rating guardado, ratingWithRelations:', ratingWithRelations ? 'encontrado' : 'null');
+    if (ratingWithRelations) {
+      console.log('⭐ Emitiendo evento rating_created...');
+      // Emitir evento WebSocket para actualización en tiempo real
+      this.notificationsGateway.emitRatingCreated(ratingWithRelations);
+    } else {
+      console.log('⚠️ No se pudo cargar ratingWithRelations, no se emitirá evento');
+    }
+
+    return savedRating;
   }
 
   /**
@@ -100,5 +122,31 @@ export class RatingsService {
       order: { createdAt: 'DESC' },
       take: 20, // Últimas 20 calificaciones
     });
+  }
+
+  /**
+   * Obtiene el promedio de calificaciones de una empresa
+   * Basado en las calificaciones de todos sus conductores
+   */
+  async getCompanyAverageRating(companyUserId: number): Promise<{ average: number; count: number }> {
+    // Buscar todas las calificaciones de conductores que han trabajado en ambulancias de la empresa
+    // La query busca calificaciones donde:
+    // 1. El rated_user_id es un conductor (tiene rol DRIVER)
+    // 2. Ese conductor ha tenido turnos con ambulancias de la empresa
+    const result = await this.ratingRepository
+      .createQueryBuilder('rating')
+      .innerJoin('rating.serviceRequest', 'serviceRequest')
+      .innerJoin('serviceRequest.shift', 'shift')
+      .innerJoin('shift.ambulance', 'ambulance')
+      .innerJoin('ambulance.company', 'company')
+      .where('company.user_id = :companyUserId', { companyUserId })
+      .select('AVG(rating.score)', 'average')
+      .addSelect('COUNT(rating.id)', 'count')
+      .getRawOne();
+
+    return {
+      average: result?.average ? parseFloat(result.average) : 0,
+      count: result?.count ? parseInt(result.count) : 0,
+    };
   }
 }
