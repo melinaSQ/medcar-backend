@@ -81,4 +81,14 @@ export class ShiftsController {
             activeMission: activeRequest || null,
         };
     }
+
+    /**
+     * Endpoint para que un DRIVER obtenga su historial de turnos finalizados.
+     */
+    @Get('my-history')
+    @HasRoles(Rol.DRIVER)
+    findMyShiftHistory(@Request() req) {
+        const driverId = req.user.id;
+        return this.shiftsService.findShiftHistoryByDriver(driverId);
+    }
 }

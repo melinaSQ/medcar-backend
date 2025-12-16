@@ -184,4 +184,20 @@ export class ShiftsService {
             };
         });
     }
+
+    /**
+     * Obtiene el historial de turnos finalizados de un conductor.
+     */
+    async findShiftHistoryByDriver(driverId: number): Promise<Shift[]> {
+        return this.shiftRepository.find({
+            where: {
+                driver: { id: driverId },
+                isActive: false, // Solo turnos finalizados
+            },
+            relations: ['ambulance', 'serviceRequests', 'serviceRequests.client'],
+            order: {
+                endTime: 'DESC', // Más recientes primero
+            },
+        });
+    }
 }
