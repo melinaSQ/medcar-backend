@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './user.entity';
 import { Repository } from 'typeorm';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcrypt'; // <-- ¡Importa bcrypt!
 import { Rol } from 'src/common/enums/rol.enum';
 import { Company } from 'src/companies/company.entity';
@@ -202,6 +203,36 @@ export class UsersService {
             const { password, ...userWithoutPassword } = user;
             return userWithoutPassword as User;
         });
+    }
+
+    /**
+     * Actualiza el perfil del usuario autenticado
+     */
+    async updateProfile(userId: number, updateData: UpdateUserDto): Promise<User> {
+        const user = await this.usersRepository.findOneBy({ id: userId });
+        if (!user) {
+            throw new NotFoundException('Usuario no encontrado.');
+        }
+
+        // Verificar si el teléfono ya está en uso por otro usuario
+        if (updateData.phone && updateData.phone !== user.phone) {
+            const existingUser = await this.usersRepository.findOne({
+                where: { phone: updateData.phone },
+            });
+            if (existingUser) {
+                throw new ConflictException('El teléfono ya está registrado por otro usuario.');
+            }
+        }
+
+        // Actualizar solo los campos proporcionados
+        if (updateData.name !== undefined) user.name = updateData.name;
+        if (updateData.lastname !== undefined) user.lastname = updateData.lastname;
+        if (updateData.phone !== undefined) user.phone = updateData.phone;
+        if (updateData.imageUrl !== undefined) user.imageUrl = updateData.imageUrl;
+
+        const savedUser = await this.usersRepository.save(user);
+        const { password, ...userWithoutPassword } = savedUser;
+        return userWithoutPassword as User;
     }
 
 }

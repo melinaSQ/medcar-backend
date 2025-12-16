@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from 'src/auth/jwt/jwt-auth.guard';
 import { JwtRolesGuard } from 'src/auth/jwt/jwt-roles.guard';
@@ -77,5 +78,15 @@ export class UsersController {
     removeDriverRole(@Param('id') userId: number, @Request() req) {
         const adminUserId = req.user.id;
         return this.usersService.removeDriverRole(userId, adminUserId);
+    }
+
+    /**
+     * Actualizar perfil del usuario autenticado
+     */
+    @Patch('me')
+    @UseGuards(JwtAuthGuard)
+    updateProfile(@Body() updateUserDto: UpdateUserDto, @Request() req) {
+        const userId = req.user.id;
+        return this.usersService.updateProfile(userId, updateUserDto);
     }
 }
