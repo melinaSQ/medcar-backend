@@ -2,7 +2,7 @@ import { Ambulance } from "src/ambulances/ambulance.entity";
 import { CompanyStatus } from "src/common/enums/company-status.enum";
 import { ShiftCode } from "src/shift_codes/shift_code.entity";
 import { User } from "src/users/user.entity";
-import { Column, CreateDateColumn, Entity, JoinColumn, OneToMany, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, JoinColumn, JoinTable, ManyToMany, OneToMany, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 
 @Entity({ name: 'companies' })
 export class Company {
@@ -51,5 +51,14 @@ export class Company {
     ambulances: Ambulance[]; // Esta propiedad contendrá un array de objetos Ambulance
     @OneToMany(() => ShiftCode, (shiftCode) => shiftCode.company)
     shiftCodes: ShiftCode[];
+
+    /** Conductores dados de alta por esta empresa (tabla puente `company_drivers`). */
+    @ManyToMany(() => User)
+    @JoinTable({
+        name: 'company_drivers',
+        joinColumn: { name: 'company_id', referencedColumnName: 'id' },
+        inverseJoinColumn: { name: 'user_id', referencedColumnName: 'id' },
+    })
+    drivers: User[];
 
 }

@@ -1,4 +1,4 @@
-import { BeforeInsert, Column, CreateDateColumn, Entity, OneToMany, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { BeforeInsert, Column, CreateDateColumn, Entity, ManyToMany, OneToMany, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { Rol } from 'src/common/enums/rol.enum'; // <-- ¡Importa tu enum!
 import { Company } from "src/companies/company.entity";
 import { Shift } from "src/shifts/shift.entity";
@@ -100,6 +100,9 @@ export class User {
     /* RELACIONES EXTERNAS*/
     @OneToOne(() => Company, (company) => company.user)
     company: Company[];
+
+    @ManyToMany(() => Company, (company) => company.drivers)
+    companiesAsDriver: Company[];
 
     @OneToMany(() => Shift, (shift) => shift.driver)
     shiftsAsDriver: Shift[]; 

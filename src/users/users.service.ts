@@ -95,9 +95,10 @@ export class UsersService {
     }
 
     /**
-     * Comprueba existencia y bloqueo en cada request JWT (y evita usar tokens válidos tras bloqueo).
+     * Usuario activo para el contexto HTTP: roles actuales desde BD (no del payload JWT),
+     * para que asignaciones como COMPANY_ADMIN apliquen sin obligar a iniciar sesión de nuevo.
      */
-    async assertUserActiveForJwt(userId: number): Promise<void> {
+    async assertUserActiveForRequest(userId: number): Promise<{ id: number; roles: Rol[] }> {
         const user = await this.usersRepository.findOneBy({ id: userId });
         if (!user) {
             throw new UnauthorizedException('Usuario no encontrado.');
@@ -107,6 +108,7 @@ export class UsersService {
                 'Tu cuenta ha sido suspendida. Contacta al administrador.',
             );
         }
+        return { id: user.id, roles: user.roles };
     }
 
     /**
@@ -192,6 +194,17 @@ export class UsersService {
         user.roles = [...user.roles, Rol.DRIVER];
         const savedUser = await this.usersRepository.save(user);
 
+        await this.companyRepository
+            .createQueryBuilder()
+            .relation(Company, 'drivers')
+            .of(company.id)
+            .add(savedUser.id);
+
+        this.notificationsGateway.emitUserProfileUpdated(
+            savedUser.id,
+            'driver_role_assigned',
+        );
+
         const { password, ...userWithoutPassword } = savedUser;
         return userWithoutPassword as User;
     }
@@ -200,8 +213,10 @@ export class UsersService {
      * Quita el rol de DRIVER a un usuario
      */
     async removeDriverRole(userId: number, adminUserId: number): Promise<User> {
-        // Verificar que el admin tiene una empresa
-        const company = await this.companyRepository.findOneBy({ user: { id: adminUserId } });
+        const company = await this.companyRepository.findOne({
+            where: { user: { id: adminUserId } },
+            relations: ['drivers'],
+        });
         if (!company) {
             throw new UnauthorizedException('No tienes permisos para realizar esta acción.');
         }
@@ -211,16 +226,36 @@ export class UsersService {
             throw new NotFoundException('Usuario no encontrado.');
         }
 
-        // Verificar si tiene el rol
-        if (!user.roles.includes(Rol.DRIVER)) {
-            throw new ConflictException('El usuario no tiene el rol de conductor.');
+        const wasLinked = company.drivers?.some((d) => d.id === userId) ?? false;
+        if (!wasLinked) {
+            throw new ConflictException(
+                'Este usuario no está registrado como conductor de tu empresa.',
+            );
         }
 
-        // Quitar el rol DRIVER
-        user.roles = user.roles.filter(role => role !== Rol.DRIVER);
-        const savedUser = await this.usersRepository.save(user);
+        await this.companyRepository
+            .createQueryBuilder()
+            .relation(Company, 'drivers')
+            .of(company.id)
+            .remove(userId);
 
-        const { password, ...userWithoutPassword } = savedUser;
+        const stillLinkedToAnyCompany = await this.companyRepository
+            .createQueryBuilder('c')
+            .innerJoin('c.drivers', 'd')
+            .where('d.id = :userId', { userId })
+            .getCount();
+
+        if (stillLinkedToAnyCompany === 0 && user.roles.includes(Rol.DRIVER)) {
+            user.roles = user.roles.filter((role) => role !== Rol.DRIVER);
+            await this.usersRepository.save(user);
+        }
+
+        const refreshed = await this.usersRepository.findOneBy({ id: userId });
+        this.notificationsGateway.emitUserProfileUpdated(
+            userId,
+            'driver_unlinked_from_company',
+        );
+        const { password, ...userWithoutPassword } = refreshed!;
         return userWithoutPassword as User;
     }
 
@@ -228,19 +263,17 @@ export class UsersService {
      * Obtiene todos los conductores (usuarios con rol DRIVER)
      */
     async findAllDrivers(adminUserId: number): Promise<User[]> {
-        // Verificar que el admin tiene una empresa
-        const company = await this.companyRepository.findOneBy({ user: { id: adminUserId } });
+        const company = await this.companyRepository.findOne({
+            where: { user: { id: adminUserId } },
+            relations: ['drivers'],
+        });
         if (!company) {
             throw new UnauthorizedException('No tienes permisos para realizar esta acción.');
         }
 
-        const users = await this.usersRepository.find();
-        
-        // Filtrar solo los que tienen rol DRIVER
-        const drivers = users.filter(user => user.roles.includes(Rol.DRIVER));
-        
-        // Eliminar contraseñas
-        return drivers.map(user => {
+        const drivers = company.drivers ?? [];
+
+        return drivers.map((user) => {
             const { password, ...userWithoutPassword } = user;
             return userWithoutPassword as User;
         });

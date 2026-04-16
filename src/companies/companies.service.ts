@@ -203,7 +203,19 @@ export class CompaniesService {
         // 5. Guardar los cambios en la entidad User.
         const updatedUser = await this.userRepository.save(driverUser);
 
-        // 6. Eliminar la contraseña antes de devolver la respuesta.
+        // 6. Vincular al conductor con esta empresa (lista propia del admin).
+        await this.companyRepository
+            .createQueryBuilder()
+            .relation(Company, 'drivers')
+            .of(company.id)
+            .add(updatedUser.id);
+
+        this.notificationsGateway.emitUserProfileUpdated(
+            updatedUser.id,
+            'driver_assigned_to_company',
+        );
+
+        // 7. Eliminar la contraseña antes de devolver la respuesta.
         delete (updatedUser as any).password;
         return updatedUser;
     }
