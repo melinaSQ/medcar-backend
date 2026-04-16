@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { RequestContactChangeDto } from './dto/request-contact-change.dto';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from 'src/auth/jwt/jwt-auth.guard';
 import { JwtRolesGuard } from 'src/auth/jwt/jwt-roles.guard';
@@ -28,8 +29,8 @@ export class UsersController {
    * Solo los usuarios con el rol 'ADMIN' pueden acceder a esta ruta.
    */
     @Get()
-    @UseGuards(JwtAuthGuard) // <-- Se aplican en orden
-    //@HasRoles(Rol.ADMIN) // <-- Metadata que el RolesGuard leerá
+    @UseGuards(JwtAuthGuard, JwtRolesGuard)
+    @HasRoles(Rol.ADMIN)
     findAll() {
         // Llama al método del servicio, que ya se encarga de la lógica
         // y de eliminar las contraseñas.
@@ -88,5 +89,27 @@ export class UsersController {
     updateProfile(@Body() updateUserDto: UpdateUserDto, @Request() req) {
         const userId = req.user.id;
         return this.usersService.updateProfile(userId, updateUserDto);
+    }
+
+    /**
+     * Obtener datos actuales del usuario autenticado (refrescar sesión en la app).
+     */
+    @Get('me')
+    @UseGuards(JwtAuthGuard)
+    getMe(@Request() req) {
+        return this.usersService.getPublicProfile(req.user.id);
+    }
+
+    /**
+     * Solicita cambio de datos críticos (correo/celular) para aprobación ADMIN.
+     */
+    @Patch('me/request-contact-change')
+    @UseGuards(JwtAuthGuard)
+    requestContactChange(
+        @Body() dto: RequestContactChangeDto,
+        @Request() req,
+    ) {
+        const userId = req.user.id;
+        return this.usersService.requestContactChange(userId, dto);
     }
 }

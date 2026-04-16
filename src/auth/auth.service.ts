@@ -60,9 +60,11 @@ export class AuthService {
         // Primero, validamos al usuario.
         const user = await this.validateUser(loginData.email, loginData.password);
 
-        // Si validateUser devuelve null, significa que las credenciales son incorrectas.
+        // Si validateUser devuelve null: usuario inexistente, eliminado o contraseña incorrecta.
         if (!user) {
-            throw new UnauthorizedException('Credenciales inválidas.'); // Mensaje genérico
+            throw new UnauthorizedException(
+                'Correo o contraseña incorrectos. Si tu cuenta fue eliminada por un administrador, ya no podrás iniciar sesión con ella.',
+            );
         }
 
         // Si el usuario es válido, creamos el payload del JWT.
@@ -101,6 +103,11 @@ export class AuthService {
         if (user) {
             const isMatch = await compare(pass, user.password);
             if (isMatch) {
+                if (user.isBlocked) {
+                    throw new UnauthorizedException(
+                        'Tu cuenta está bloqueada. No puedes usar la aplicación hasta que un administrador restaure el acceso. Si crees que es un error, contacta al administrador.',
+                    );
+                }
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const { password, ...result } = user;
                 return result; // Devuelve el usuario sin la contraseña

@@ -4,6 +4,9 @@ import { WebSocketGateway, SubscribeMessage, WebSocketServer, OnGatewayConnectio
 import { Server, Socket } from 'socket.io';
 import { forwardRef, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { User } from 'src/users/user.entity';
 import { JwtPayload } from 'src/auth/jwt/jwt.strategy';
 import { ServiceRequestsService } from 'src/service_requests/service_requests.service';
 
@@ -19,6 +22,7 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
 
   constructor(
     private readonly jwtService: JwtService,
+    @InjectRepository(User) private readonly userRepository: Repository<User>,
     @Inject(forwardRef(() => ServiceRequestsService))
     private readonly serviceRequestsService: ServiceRequestsService,
   ) {}
@@ -39,7 +43,7 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   }
 
   @SubscribeMessage('authenticate')
-  handleAuthenticate(client: Socket, ...args: any[]): void {
+  async handleAuthenticate(client: Socket, ...args: any[]): Promise<void> {
     try {
       const payloadAsString = args[0];
       if (!payloadAsString) throw new Error('Payload vacío recibido.');
@@ -53,10 +57,27 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
 
       if (!userId || !roles) throw new UnauthorizedException('Token inválido.');
 
+      const user = await this.userRepository.findOneBy({ id: userId });
+      if (!user) {
+        client.emit('unauthorized', { message: 'Usuario no encontrado.' });
+        client.disconnect();
+        return;
+      }
+      if (user.isBlocked) {
+        client.emit('unauthorized', {
+          message: 'Tu cuenta ha sido suspendida. Contacta al administrador.',
+        });
+        client.disconnect();
+        return;
+      }
+
       connectedClients[userId] = client;
       client.join(`user_${userId}`);
       if (roles.includes('COMPANY_ADMIN')) {
         client.join('room_company_admin');
+      }
+      if (roles.includes('ADMIN') || roles.includes('SYSTEM_ADMIN')) {
+        client.join('room_system_admin');
       }
 
       console.log(`Usuario ${userId} autenticado en WebSocket. Roles: ${roles.join(', ')}`);
@@ -87,6 +108,35 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
       message: '¡Nueva solicitud de emergencia pendiente!',
       requestDetails: request,
     });
+  }
+
+  /**
+   * Notifica a administradores del sistema para refrescar colas (empresas pendientes, cambios de contacto).
+   */
+  public emitSystemAdminQueuesUpdated(reason: string): void {
+    this.server.to('room_system_admin').emit('admin_queues_updated', {
+      reason,
+      at: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * El cliente debe refrescar perfil (p. ej. tras aprobar/rechazar cambio de contacto).
+   */
+  public emitUserProfileUpdated(userId: number, reason: string): void {
+    this.server.to(`user_${userId}`).emit('user_profile_updated', {
+      reason,
+      at: new Date().toISOString(),
+    });
+  }
+
+  /** Cierra sockets del usuario (p. ej. tras bloqueo). */
+  public disconnectUserSockets(userId: number): void {
+    try {
+      this.server.in(`user_${userId}`).disconnectSockets(true);
+    } catch (e) {
+      console.error('disconnectUserSockets', e);
+    }
   }
 
   public emitNewMissionToDriver(driverId: number, request: any): void {

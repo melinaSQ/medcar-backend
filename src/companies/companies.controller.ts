@@ -39,6 +39,13 @@ export class CompaniesController {
         return this.companiesService.approve(id);
     }
 
+    @Patch(':id/reject')
+    @UseGuards(JwtAuthGuard, JwtRolesGuard)
+    @HasRoles(Rol.ADMIN)
+    reject(@Param('id', ParseIntPipe) id: number) {
+        return this.companiesService.reject(id);
+    }
+
     /**
    * Endpoint para que un COMPANY_ADMIN asigne el rol de DRIVER a un usuario existente.
    */

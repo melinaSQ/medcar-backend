@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, forwardRef, Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Company } from './company.entity';
@@ -7,6 +7,7 @@ import { CompanyStatus } from 'src/common/enums/company-status.enum';
 import { User } from 'src/users/user.entity';
 import { Rol } from 'src/common/enums/rol.enum';
 import { AssignDriverDto } from './dto/assign-driver.dto';
+import { NotificationsGateway } from 'src/notifications/notifications.gateway';
 
 
 @Injectable()
@@ -17,6 +18,9 @@ export class CompaniesService {
 
         @InjectRepository(User)
         private readonly userRepository: Repository<User>, // ¡IMPORTANTE! Inyectamos el UserRepository para poder modificar usuarios
+
+        @Inject(forwardRef(() => NotificationsGateway))
+        private readonly notificationsGateway: NotificationsGateway,
 
     ) { }
 
@@ -51,7 +55,9 @@ export class CompaniesService {
         console.log(newCompany);
 
         // 3. Guardar en la base de datos.
-        return this.companyRepository.save(newCompany);
+        const saved = await this.companyRepository.save(newCompany);
+        this.notificationsGateway.emitSystemAdminQueuesUpdated('company_pending');
+        return saved;
     }
 
     /**
@@ -90,8 +96,34 @@ export class CompaniesService {
 
         // 4. Guardamos la entidad Company actualizada
         const updatedCompany = await this.companyRepository.save(company);
+        this.notificationsGateway.emitSystemAdminQueuesUpdated('company_resolved');
 
         return updatedCompany;
+    }
+
+    /**
+     * Rechaza una solicitud de registro de empresa (solo en estado PENDING).
+     */
+    async reject(companyId: number): Promise<Company> {
+        const company = await this.companyRepository.findOne({
+            where: { id: companyId },
+            relations: ['user'],
+        });
+
+        if (!company) {
+            throw new NotFoundException(`La compañía con el ID ${companyId} no fue encontrada.`);
+        }
+
+        if (company.status !== CompanyStatus.PENDING) {
+            throw new ConflictException(
+                'Solo se pueden rechazar empresas en estado PENDIENTE.',
+            );
+        }
+
+        company.status = CompanyStatus.REJECTED;
+        const saved = await this.companyRepository.save(company);
+        this.notificationsGateway.emitSystemAdminQueuesUpdated('company_resolved');
+        return saved;
     }
 
     /**

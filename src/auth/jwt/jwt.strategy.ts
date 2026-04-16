@@ -2,6 +2,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
 import { Injectable } from '@nestjs/common';
 import { jwtConstants } from './jwt.constants';
+import { UsersService } from 'src/users/users.service';
 
 //esta clase define la estrategia JWT para la autenticación
 
@@ -13,7 +14,7 @@ export interface JwtPayload {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-    constructor() {
+    constructor(private readonly usersService: UsersService) {
         super({
             jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
             ignoreExpiration: false,
@@ -28,8 +29,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
      * @returns El objeto que NestJS adjuntará a `request.user`.
      */
     async validate(payload: JwtPayload) {
-        // Lo que retornes aquí será inyectado en el objeto 'request' de cualquier ruta protegida.
-        // Por ejemplo, podrás acceder a él en un controlador como 'req.user'.
+        await this.usersService.assertUserActiveForJwt(payload.sub);
         return {
             id: payload.sub,
             roles: payload.roles

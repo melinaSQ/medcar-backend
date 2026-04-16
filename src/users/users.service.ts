@@ -1,9 +1,21 @@
-import { ConflictException, Injectable, InternalServerErrorException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+    BadRequestException,
+    ConflictException,
+    ForbiddenException,
+    forwardRef,
+    Inject,
+    Injectable,
+    InternalServerErrorException,
+    NotFoundException,
+    UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './user.entity';
 import { Repository } from 'typeorm';
+import { NotificationsGateway } from 'src/notifications/notifications.gateway';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { RequestContactChangeDto } from './dto/request-contact-change.dto';
 import * as bcrypt from 'bcrypt'; // <-- ¡Importa bcrypt!
 import { Rol } from 'src/common/enums/rol.enum';
 import { Company } from 'src/companies/company.entity';
@@ -17,6 +29,8 @@ export class UsersService {
     constructor(
         @InjectRepository(User) private usersRepository: Repository<User>,
         @InjectRepository(Company) private companyRepository: Repository<Company>,
+        @Inject(forwardRef(() => NotificationsGateway))
+        private readonly notificationsGateway: NotificationsGateway,
     ) { }
 
     //METODOS PARA MANEJAR USUARIOS
@@ -78,6 +92,33 @@ export class UsersService {
         // Simplemente devolvemos lo que encontramos (el usuario o null).
 
         return user;
+    }
+
+    /**
+     * Comprueba existencia y bloqueo en cada request JWT (y evita usar tokens válidos tras bloqueo).
+     */
+    async assertUserActiveForJwt(userId: number): Promise<void> {
+        const user = await this.usersRepository.findOneBy({ id: userId });
+        if (!user) {
+            throw new UnauthorizedException('Usuario no encontrado.');
+        }
+        if (user.isBlocked) {
+            throw new UnauthorizedException(
+                'Tu cuenta ha sido suspendida. Contacta al administrador.',
+            );
+        }
+    }
+
+    /**
+     * Perfil público del usuario autenticado (sin contraseña). Sirve para refrescar datos en la app.
+     */
+    async getPublicProfile(userId: number): Promise<Omit<User, 'password'>> {
+        const user = await this.usersRepository.findOneBy({ id: userId });
+        if (!user) {
+            throw new NotFoundException('Usuario no encontrado.');
+        }
+        const { password, ...rest } = user;
+        return rest as Omit<User, 'password'>;
     }
 
     //findOne(id): Busca un usuario por su ID.
@@ -214,14 +255,11 @@ export class UsersService {
             throw new NotFoundException('Usuario no encontrado.');
         }
 
-        // Verificar si el teléfono ya está en uso por otro usuario
+        // Cambiar teléfono es una operación crítica que debe aprobar ADMIN.
         if (updateData.phone && updateData.phone !== user.phone) {
-            const existingUser = await this.usersRepository.findOne({
-                where: { phone: updateData.phone },
-            });
-            if (existingUser) {
-                throw new ConflictException('El teléfono ya está registrado por otro usuario.');
-            }
+            throw new ForbiddenException(
+                'El cambio de celular requiere validación del administrador.',
+            );
         }
 
         // Actualizar solo los campos proporcionados
@@ -233,6 +271,72 @@ export class UsersService {
         const savedUser = await this.usersRepository.save(user);
         const { password, ...userWithoutPassword } = savedUser;
         return userWithoutPassword as User;
+    }
+
+    /**
+     * Solicita cambio de correo y/o teléfono.
+     * El cambio NO se aplica hasta aprobación del ADMIN.
+     */
+    async requestContactChange(
+        userId: number,
+        dto: RequestContactChangeDto,
+    ): Promise<{ message: string; pendingEmail: string | null; pendingPhone: string | null; requestedAt: Date | null }> {
+        const user = await this.usersRepository.findOneBy({ id: userId });
+        if (!user) {
+            throw new NotFoundException('Usuario no encontrado.');
+        }
+
+        const normalizedEmail = dto.email?.trim().toLowerCase();
+        const normalizedPhone = dto.phone?.trim();
+
+        if (!normalizedEmail && !normalizedPhone) {
+            throw new BadRequestException('Debes enviar email o teléfono para solicitar cambio.');
+        }
+
+        if (normalizedEmail && normalizedEmail !== user.email) {
+            const existingEmail = await this.usersRepository.findOne({
+                where: { email: normalizedEmail },
+            });
+            if (existingEmail && existingEmail.id !== user.id) {
+                throw new ConflictException('El correo solicitado ya está en uso.');
+            }
+        }
+
+        if (normalizedPhone && normalizedPhone !== user.phone) {
+            const existingPhone = await this.usersRepository.findOne({
+                where: { phone: normalizedPhone },
+            });
+            if (existingPhone && existingPhone.id !== user.id) {
+                throw new ConflictException('El teléfono solicitado ya está en uso.');
+            }
+        }
+
+        const emailChanged = normalizedEmail && normalizedEmail !== user.email;
+        const phoneChanged = normalizedPhone && normalizedPhone !== user.phone;
+
+        if (!emailChanged && !phoneChanged) {
+            throw new ConflictException(
+                'Los datos solicitados son iguales a los actuales.',
+            );
+        }
+
+        if (emailChanged) {
+            user.pendingEmail = normalizedEmail ?? null;
+        }
+        if (phoneChanged) {
+            user.pendingPhone = normalizedPhone ?? null;
+        }
+        user.contactChangeRequestedAt = new Date();
+
+        const saved = await this.usersRepository.save(user);
+        this.notificationsGateway.emitSystemAdminQueuesUpdated('contact_change_requested');
+        return {
+            message:
+                'Solicitud enviada. Un administrador debe aprobar el cambio de contacto.',
+            pendingEmail: saved.pendingEmail ?? null,
+            pendingPhone: saved.pendingPhone ?? null,
+            requestedAt: saved.contactChangeRequestedAt ?? null,
+        };
     }
 
 }

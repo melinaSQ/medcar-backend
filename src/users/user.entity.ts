@@ -42,6 +42,35 @@ export class User {
     })
     roles: Rol[]; // <-- El tipo en TypeScript es un array de tu enum Rol
 
+    @Column({
+        name: 'is_blocked',
+        type: 'boolean',
+        default: false,
+    })
+    isBlocked: boolean;
+
+    @Column({
+        name: 'pending_email',
+        type: 'varchar',
+        length: 255,
+        nullable: true,
+    })
+    pendingEmail: string | null;
+
+    @Column({
+        name: 'pending_phone',
+        type: 'varchar',
+        length: 50,
+        nullable: true,
+    })
+    pendingPhone: string | null;
+
+    @Column({
+        name: 'contact_change_requested_at',
+        type: 'timestamp',
+        nullable: true,
+    })
+    contactChangeRequestedAt: Date | null;
 
     @Column({
         name: 'notification_token', // Buena práctica: nombrar explícitamente

@@ -11,7 +11,7 @@ import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
-    AuthModule,
+    forwardRef(() => AuthModule),
     TypeOrmModule.forFeature([ServiceRequest, User, Shift, Company]),
     forwardRef(() => NotificationsModule),
   ],
