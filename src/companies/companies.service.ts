@@ -24,6 +24,35 @@ export class CompaniesService {
 
     ) { }
 
+    /**
+     * Datos públicos de la empresa del usuario (sin contraseñas ni relaciones pesadas).
+     */
+    async findByUserId(userId: number): Promise<{
+        id: number;
+        name: string;
+        ruc: string;
+        phone: string;
+        status: CompanyStatus;
+        createdAt: Date;
+        updatedAt: Date;
+    } | null> {
+        const c = await this.companyRepository.findOne({
+            where: { user: { id: userId } },
+        });
+        if (!c) {
+            return null;
+        }
+        return {
+            id: c.id,
+            name: c.name,
+            ruc: c.ruc,
+            phone: c.phone,
+            status: c.status,
+            createdAt: c.createdAt,
+            updatedAt: c.updatedAt,
+        };
+    }
+
     async create(company: CreateCompanyDto, userId: number): Promise<Company> {
 
         // --- ¡AÑADE ESTOS CONSOLE.LOG PARA DEPURAR! ---
@@ -40,6 +69,15 @@ export class CompaniesService {
         });
 
         if (existingCompany) {
+            if (existingCompany.status === CompanyStatus.REJECTED) {
+                existingCompany.name = company.name;
+                existingCompany.ruc = company.ruc;
+                existingCompany.phone = company.phone;
+                existingCompany.status = CompanyStatus.PENDING;
+                const saved = await this.companyRepository.save(existingCompany);
+                this.notificationsGateway.emitSystemAdminQueuesUpdated('company_pending');
+                return saved;
+            }
             throw new ConflictException(`El usuario con ID ${userId} ya administra una empresa.`);
         }
 

@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards, Request, Patch, Param, ParseIntPipe } from '@nestjs/common';
+import { Body, Controller, Post, Get, UseGuards, Request, Patch, Param, ParseIntPipe } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/auth/jwt/jwt-auth.guard';
 import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
@@ -13,6 +13,15 @@ export class CompaniesController {
     constructor(private readonly companiesService: CompaniesService) { }
 
     //http://localhost:3000/companies
+
+    /**
+     * Empresa vinculada al usuario autenticado (o null si no ha registrado).
+     */
+    @Get('me')
+    @UseGuards(JwtAuthGuard)
+    getMyCompany(@Request() req: { user: { id: number } }) {
+        return this.companiesService.findByUserId(req.user.id);
+    }
 
     @Post()
     @UseGuards(JwtAuthGuard) // <-- ¡PROTEGEMOS LA RUTA!
