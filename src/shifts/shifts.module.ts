@@ -14,6 +14,7 @@ import { AuthModule } from 'src/auth/auth.module';
     TypeOrmModule.forFeature([Shift, ShiftCode, Ambulance, Company])
   ],
   providers: [ShiftsService],
-  controllers: [ShiftsController]
+  controllers: [ShiftsController],
+  exports: [ShiftsService],
 })
 export class ShiftsModule { }

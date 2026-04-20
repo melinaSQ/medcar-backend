@@ -9,6 +9,9 @@ import { Repository } from 'typeorm';
 import { User } from 'src/users/user.entity';
 import { JwtPayload } from 'src/auth/jwt/jwt.strategy';
 import { ServiceRequestsService } from 'src/service_requests/service_requests.service';
+import { Company } from 'src/companies/company.entity';
+import { ShiftsService } from 'src/shifts/shifts.service';
+import { Rol } from 'src/common/enums/rol.enum';
 
 const connectedClients: { [userId: number]: Socket } = {};
 
@@ -23,8 +26,10 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   constructor(
     private readonly jwtService: JwtService,
     @InjectRepository(User) private readonly userRepository: Repository<User>,
+    @InjectRepository(Company) private readonly companyRepository: Repository<Company>,
     @Inject(forwardRef(() => ServiceRequestsService))
     private readonly serviceRequestsService: ServiceRequestsService,
+    private readonly shiftsService: ShiftsService,
   ) {}
 
   handleConnection(client: Socket) {
@@ -53,9 +58,8 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
 
       const decodedPayload: JwtPayload = this.jwtService.verify(payloadObject.token);
       const userId = decodedPayload.sub;
-      const roles = decodedPayload.roles;
 
-      if (!userId || !roles) throw new UnauthorizedException('Token inválido.');
+      if (!userId) throw new UnauthorizedException('Token inválido.');
 
       const user = await this.userRepository.findOneBy({ id: userId });
       if (!user) {
@@ -71,12 +75,23 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
         return;
       }
 
+      const roles = user.roles;
+
       connectedClients[userId] = client;
       client.join(`user_${userId}`);
-      if (roles.includes('COMPANY_ADMIN')) {
+      if (roles.includes(Rol.COMPANY_ADMIN)) {
         client.join('room_company_admin');
+        const company = await this.companyRepository.findOneBy({
+          user: { id: userId },
+        });
+        if (company) {
+          client.join(`room_company_${company.id}`);
+        }
       }
-      if (roles.includes('ADMIN') || roles.includes('SYSTEM_ADMIN')) {
+      if (
+        roles.includes(Rol.ADMIN) ||
+        roles.some((r) => String(r).toUpperCase() === 'SYSTEM_ADMIN')
+      ) {
         client.join('room_system_admin');
       }
 
@@ -92,12 +107,26 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   @SubscribeMessage('update_location')
   async handleLocationUpdate(client: Socket, payload: { shiftId: number; lat: number; lon: number }): Promise<void> {
     console.log(`📍 Ubicación recibida: shiftId=${payload.shiftId}, lat=${payload.lat}, lon=${payload.lon}`);
-    
+
+    const locationData = {
+      shiftId: payload.shiftId,
+      lat: payload.lat,
+      lon: payload.lon,
+      timestamp: new Date().toISOString(),
+    };
+
+    const ctx = await this.shiftsService.getShiftBroadcastContext(payload.shiftId);
+    if (ctx) {
+      this.server.to(`room_company_${ctx.companyId}`).emit('company_ambulance_location', {
+        ...locationData,
+        plate: ctx.plate,
+      });
+    }
+
     const request = await this.serviceRequestsService.findActiveRequestByShift(payload.shiftId);
     console.log(`📍 Solicitud activa para shift ${payload.shiftId}:`, request ? `ID ${request.id}, clientId ${request.client?.id}` : 'No encontrada');
-    
+
     if (request && request.client) {
-      const locationData = { ...payload, timestamp: new Date().toISOString() };
       console.log(`📍 Enviando ubicación a cliente ${request.client.id}`);
       this.emitAmbulanceLocation(request.client.id, locationData);
     }

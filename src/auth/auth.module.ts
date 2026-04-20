@@ -15,7 +15,7 @@ import { JwtAuthGuard } from './jwt/jwt-auth.guard';
     forwardRef(() => UsersModule),
     JwtModule.register({
       secret: jwtConstants.secret, // ¡MUY IMPORTANTE! Mueve esto a variables de entorno (.env) más adelante
-      signOptions: { expiresIn: '2d' }, // El token expirará en 2 días
+      //signOptions: { expiresIn: '2d' }, // El token expirará en 2 días
     }),
   ],
   providers: [

@@ -1,10 +1,16 @@
-import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+    Injectable,
+    NotFoundException,
+    UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Ambulance } from './ambulance.entity';
 import { Company } from 'src/companies/company.entity';
 import { CreateAmbulanceDto } from './dto/create-ambulance.dto';
 import { AmbulanceStatus } from 'src/common/enums/ambulance-status.enum';
+import { Shift } from 'src/shifts/shift.entity';
+import { ShiftCode } from 'src/shift_codes/shift_code.entity';
 
 @Injectable()
 export class AmbulancesService {
@@ -137,7 +143,45 @@ export class AmbulancesService {
             throw new NotFoundException('Ambulancia no encontrada o no pertenece a tu compañía.');
         }
 
-        await this.ambulanceRepository.remove(ambulance);
+        /**
+         * MySQL rechaza borrar la ambulancia si existen shifts o shift_codes con ambulance_id,
+         * o si service_requests siguen apuntando a esos shifts. Se limpia en orden dentro de una transacción.
+         */
+        await this.ambulanceRepository.manager.transaction(async (manager) => {
+            const shiftRows: { id: number }[] = await manager.query(
+                'SELECT id FROM shifts WHERE ambulance_id = ?',
+                [ambulanceId],
+            );
+            const shiftIds = shiftRows.map((r) => r.id);
+
+            if (shiftIds.length > 0) {
+                await manager.query(
+                    `UPDATE service_requests SET shift_id = NULL WHERE shift_id IN (${shiftIds.map(() => '?').join(',')})`,
+                    shiftIds,
+                );
+            }
+
+            await manager
+                .createQueryBuilder()
+                .delete()
+                .from(Shift)
+                .where('ambulance_id = :ambulanceId', { ambulanceId })
+                .execute();
+
+            await manager
+                .createQueryBuilder()
+                .delete()
+                .from(ShiftCode)
+                .where('ambulance_id = :ambulanceId', { ambulanceId })
+                .execute();
+
+            await manager
+                .createQueryBuilder()
+                .delete()
+                .from(Ambulance)
+                .where('id = :ambulanceId', { ambulanceId })
+                .execute();
+        });
     }
 
 }

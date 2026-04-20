@@ -200,4 +200,23 @@ export class ShiftsService {
             },
         });
     }
+
+    /**
+     * Contexto para difundir ubicación del turno al panel de la empresa (WebSocket).
+     */
+    async getShiftBroadcastContext(
+        shiftId: number,
+    ): Promise<{ companyId: number; plate: string } | null> {
+        const shift = await this.shiftRepository.findOne({
+            where: { id: shiftId, isActive: true },
+            relations: ['ambulance', 'ambulance.company'],
+        });
+        if (!shift?.ambulance?.company) {
+            return null;
+        }
+        return {
+            companyId: shift.ambulance.company.id,
+            plate: shift.ambulance.plate,
+        };
+    }
 }
