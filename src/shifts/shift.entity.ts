@@ -53,6 +53,13 @@ export class Shift {
     @ManyToOne(() => Ambulance, (ambulance) => ambulance.shifts)
     @JoinColumn({ name: 'ambulance_id' })
     ambulance: Ambulance;
+
+    /** Última posición GPS reportada por el conductor (seguimiento cliente por REST si falla el socket). */
+    @Column({ name: 'last_known_lat', type: 'double', nullable: true })
+    lastKnownLat: number | null;
+
+    @Column({ name: 'last_known_lon', type: 'double', nullable: true })
+    lastKnownLon: number | null;
     
     /* RELACIONES EXTERNAS*/
     @OneToMany(() => ServiceRequest, (request) => request.shift)

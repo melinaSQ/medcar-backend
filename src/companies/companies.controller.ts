@@ -2,6 +2,7 @@ import { Body, Controller, Post, Get, UseGuards, Request, Patch, Param, ParseInt
 import { JwtAuthGuard } from 'src/auth/jwt/jwt-auth.guard';
 import { CompaniesService } from './companies.service';
 import { CreateCompanyDto } from './dto/create-company.dto';
+import { UpdateCompanyDto } from './dto/update-company.dto';
 import { JwtRolesGuard } from 'src/auth/jwt/jwt-roles.guard';
 import { HasRoles } from 'src/auth/jwt/jwt-roles.decorator';
 import { Rol } from 'src/common/enums/rol.enum';
@@ -21,6 +22,19 @@ export class CompaniesController {
     @UseGuards(JwtAuthGuard)
     getMyCompany(@Request() req: { user: { id: number } }) {
         return this.companiesService.findByUserId(req.user.id);
+    }
+
+    /**
+     * Actualizar nombre / teléfono de la empresa aprobada del admin autenticado.
+     */
+    @Patch('me')
+    @UseGuards(JwtAuthGuard, JwtRolesGuard)
+    @HasRoles(Rol.COMPANY_ADMIN)
+    updateMyCompany(
+        @Body() dto: UpdateCompanyDto,
+        @Request() req: { user: { id: number } },
+    ) {
+        return this.companiesService.updateMyCompany(req.user.id, dto);
     }
 
     @Post()

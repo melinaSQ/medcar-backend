@@ -204,6 +204,13 @@ export class ShiftsService {
     /**
      * Contexto para difundir ubicación del turno al panel de la empresa (WebSocket).
      */
+    async updateLastKnownLocation(shiftId: number, lat: number, lon: number): Promise<void> {
+        await this.shiftRepository.update(
+            { id: shiftId },
+            { lastKnownLat: lat, lastKnownLon: lon },
+        );
+    }
+
     async getShiftBroadcastContext(
         shiftId: number,
     ): Promise<{ companyId: number; plate: string } | null> {

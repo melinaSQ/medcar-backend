@@ -1,8 +1,9 @@
-import { ConflictException, forwardRef, Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, forwardRef, Inject, Injectable, NotFoundException, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Company } from './company.entity';
 import { CreateCompanyDto } from './dto/create-company.dto';
+import { UpdateCompanyDto } from './dto/update-company.dto';
 import { CompanyStatus } from 'src/common/enums/company-status.enum';
 import { User } from 'src/users/user.entity';
 import { Rol } from 'src/common/enums/rol.enum';
@@ -51,6 +52,31 @@ export class CompaniesService {
             createdAt: c.createdAt,
             updatedAt: c.updatedAt,
         };
+    }
+
+    async updateMyCompany(userId: number, dto: UpdateCompanyDto) {
+        if (dto.name === undefined && dto.phone === undefined) {
+            throw new BadRequestException('Envía al menos un campo para actualizar (name o phone).');
+        }
+        const company = await this.companyRepository.findOne({
+            where: { user: { id: userId } },
+        });
+        if (!company) {
+            throw new NotFoundException('No tienes una empresa registrada.');
+        }
+        if (company.status !== CompanyStatus.APPROVED) {
+            throw new ConflictException(
+                'Solo puedes editar los datos de una empresa aprobada.',
+            );
+        }
+        if (dto.name !== undefined) {
+            company.name = dto.name.trim();
+        }
+        if (dto.phone !== undefined) {
+            company.phone = dto.phone.trim();
+        }
+        await this.companyRepository.save(company);
+        return this.findByUserId(userId);
     }
 
     async create(company: CreateCompanyDto, userId: number): Promise<Company> {

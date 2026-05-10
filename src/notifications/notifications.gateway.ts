@@ -15,6 +15,27 @@ import { Rol } from 'src/common/enums/rol.enum';
 
 const connectedClients: { [userId: number]: Socket } = {};
 
+/** Roles desde TypeORM simple-json: a veces llegan como string JSON o null; evita fallar en .join / .includes. */
+function normalizeUserRoles(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.map((r) => String(r));
+  }
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.map((r) => String(r));
+      }
+    } catch {
+      /* continuar */
+    }
+    const t = raw.trim();
+    if (!t) return [];
+    return t.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  return [];
+}
+
 @Injectable()
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -50,16 +71,27 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   @SubscribeMessage('authenticate')
   async handleAuthenticate(client: Socket, ...args: any[]): Promise<void> {
     try {
-      const payloadAsString = args[0];
-      if (!payloadAsString) throw new Error('Payload vacío recibido.');
-      
-      const payloadObject = JSON.parse(payloadAsString);
-      if (!payloadObject.token) throw new UnauthorizedException('Token no proporcionado.');
+      const raw = args[0];
+      if (raw == null) throw new Error('Payload vacío recibido.');
 
-      const decodedPayload: JwtPayload = this.jwtService.verify(payloadObject.token);
-      const userId = decodedPayload.sub;
+      let token: string;
+      if (typeof raw === 'string') {
+        const parsed = JSON.parse(raw);
+        token = parsed?.token;
+      } else if (typeof raw === 'object' && raw !== null && 'token' in raw) {
+        token = String((raw as { token?: unknown }).token ?? '');
+      } else {
+        throw new Error('Formato authenticate no reconocido (use { token } o JSON string).');
+      }
 
-      if (!userId) throw new UnauthorizedException('Token inválido.');
+      if (!token) throw new UnauthorizedException('Token no proporcionado.');
+
+      const decodedPayload: JwtPayload = this.jwtService.verify(token);
+      const userId = Number(decodedPayload.sub);
+
+      if (!Number.isFinite(userId) || userId <= 0) {
+        throw new UnauthorizedException('Token inválido.');
+      }
 
       const user = await this.userRepository.findOneBy({ id: userId });
       if (!user) {
@@ -75,7 +107,7 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
         return;
       }
 
-      const roles = user.roles;
+      const roles = normalizeUserRoles(user.roles);
 
       connectedClients[userId] = client;
       client.join(`user_${userId}`);
@@ -95,7 +127,9 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
         client.join('room_system_admin');
       }
 
-      console.log(`Usuario ${userId} autenticado en WebSocket. Roles: ${roles.join(', ')}`);
+      console.log(
+        `Usuario ${userId} autenticado en WebSocket. Roles: ${roles.length ? roles.join(', ') : '(ninguno)'}`,
+      );
       client.emit('authenticated', { message: 'Autenticación exitosa.' });
     } catch (error) {
       console.error('Error de autenticación en WebSocket:', error.message);
@@ -105,17 +139,30 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   }
 
   @SubscribeMessage('update_location')
-  async handleLocationUpdate(client: Socket, payload: { shiftId: number; lat: number; lon: number }): Promise<void> {
-    console.log(`📍 Ubicación recibida: shiftId=${payload.shiftId}, lat=${payload.lat}, lon=${payload.lon}`);
+  async handleLocationUpdate(client: Socket, payload: unknown): Promise<void> {
+    const raw = Array.isArray(payload) ? (payload as unknown[])[0] : payload;
+    const p = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+    const shiftId = Number(p['shiftId']);
+    const lat = Number(p['lat']);
+    const lon = Number(p['lon'] ?? p['lng']);
+
+    if (!Number.isFinite(shiftId) || shiftId <= 0 || !Number.isFinite(lat) || !Number.isFinite(lon)) {
+      console.warn('📍 update_location: payload inválido', raw);
+      return;
+    }
+
+    console.log(`📍 Ubicación recibida: shiftId=${shiftId}, lat=${lat}, lon=${lon}`);
 
     const locationData = {
-      shiftId: payload.shiftId,
-      lat: payload.lat,
-      lon: payload.lon,
+      shiftId,
+      lat,
+      lon,
       timestamp: new Date().toISOString(),
     };
 
-    const ctx = await this.shiftsService.getShiftBroadcastContext(payload.shiftId);
+    await this.shiftsService.updateLastKnownLocation(shiftId, lat, lon);
+
+    const ctx = await this.shiftsService.getShiftBroadcastContext(shiftId);
     if (ctx) {
       this.server.to(`room_company_${ctx.companyId}`).emit('company_ambulance_location', {
         ...locationData,
@@ -123,8 +170,8 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
       });
     }
 
-    const request = await this.serviceRequestsService.findActiveRequestByShift(payload.shiftId);
-    console.log(`📍 Solicitud activa para shift ${payload.shiftId}:`, request ? `ID ${request.id}, clientId ${request.client?.id}` : 'No encontrada');
+    const request = await this.serviceRequestsService.findActiveRequestByShift(shiftId);
+    console.log(`📍 Solicitud activa para shift ${shiftId}:`, request ? `ID ${request.id}, clientId ${request.client?.id}` : 'No encontrada');
 
     if (request && request.client) {
       console.log(`📍 Enviando ubicación a cliente ${request.client.id}`);
@@ -190,7 +237,9 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   }
 
   public emitAmbulanceLocation(clientId: number, location: any): void {
-    this.server.to(`user_${clientId}`).emit('ambulance_location_updated', location);
+    const room = `user_${Number(clientId)}`;
+    console.log(`📡 ambulance_location_updated → ${room}`, location);
+    this.server.to(room).emit('ambulance_location_updated', location);
   }
 
   public emitRequestStatusUpdate(clientId: number, request: any): void {

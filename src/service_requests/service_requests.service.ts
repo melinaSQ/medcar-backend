@@ -92,10 +92,26 @@ export class ServiceRequestsService {
 
         request.shift = shift;
         request.status = ServiceRequestStatus.ASSIGNED;
-        const updatedRequest = await this.serviceRequestRepository.save(request);
+        await this.serviceRequestRepository.save(request);
 
-        if (shift.driver?.id) {
-            this.notificationsGateway.emitNewMissionToDriver(shift.driver.id, updatedRequest);
+        // Volver a cargar con relaciones para el WebSocket (payload completo para el cliente / conductor).
+        const updatedRequest = await this.serviceRequestRepository.findOne({
+            where: { id: requestId },
+            relations: [
+                'client',
+                'shift',
+                'shift.ambulance',
+                'shift.ambulance.company',
+                'shift.driver',
+            ],
+        });
+        if (!updatedRequest) {
+            throw new InternalServerErrorException('No se pudo recargar la solicitud tras asignar.');
+        }
+
+        const driverUserId = updatedRequest.shift?.driver?.id ?? shift.driver?.id;
+        if (driverUserId) {
+            this.notificationsGateway.emitNewMissionToDriver(driverUserId, updatedRequest);
         }
         if (request.client?.id) {
             this.notificationsGateway.emitRequestAssignedToClient(request.client.id, updatedRequest);
