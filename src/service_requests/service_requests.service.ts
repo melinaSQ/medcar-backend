@@ -139,13 +139,24 @@ export class ServiceRequestsService {
         if (!request) throw new NotFoundException(`No se encontró una solicitud activa con ID ${requestId} para este conductor.`);
 
         request.status = newStatus;
-        const updatedRequest = await this.serviceRequestRepository.save(request);
+        await this.serviceRequestRepository.save(request);
 
-        if (updatedRequest.client) {
-            this.notificationsGateway.emitRequestStatusUpdate(updatedRequest.client.id, updatedRequest);
+        const reloaded = await this.serviceRequestRepository.findOne({
+            where: { id: requestId },
+            relations: [
+                'client',
+                'shift',
+                'shift.ambulance',
+                'shift.ambulance.company',
+                'shift.driver',
+            ],
+        });
+
+        if (reloaded?.client) {
+            this.notificationsGateway.emitRequestStatusUpdate(reloaded.client.id, reloaded);
         }
 
-        return updatedRequest;
+        return reloaded ?? request;
     }
 
     async findActiveRequestByClient(clientId: number): Promise<ServiceRequest | null> {
@@ -158,7 +169,12 @@ export class ServiceRequestsService {
                     ServiceRequestStatus.TRAVELLING,
                 ]),
             },
-            relations: ['shift', 'shift.ambulance', 'shift.driver'],
+            relations: [
+                'shift',
+                'shift.ambulance',
+                'shift.ambulance.company',
+                'shift.driver',
+            ],
         });
     }
 
