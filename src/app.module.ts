@@ -13,6 +13,7 @@ import { RatingsModule } from './ratings/ratings.module';
 import { AuthModule } from './auth/auth.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
+import { RoutingModule } from './routing/routing.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { AdminModule } from './admin/admin.module';
     AuthModule,
     NotificationsModule,
     AdminModule,
+    RoutingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

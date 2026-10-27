@@ -15,6 +15,22 @@ import { Rol } from 'src/common/enums/rol.enum';
 
 const connectedClients: { [userId: number]: Socket } = {};
 
+const privateSocketFields = new Set([
+  'password',
+  'notificationToken',
+  'pendingEmail',
+  'pendingPhone',
+  'contactChangeRequestedAt',
+]);
+
+function sanitizeSocketPayload<T>(payload: T): T {
+  return JSON.parse(
+    JSON.stringify(payload, (key, value) =>
+      privateSocketFields.has(key) ? undefined : value,
+    ),
+  ) as T;
+}
+
 /** Roles desde TypeORM simple-json: a veces llegan como string JSON o null; evita fallar en .join / .includes. */
 function normalizeUserRoles(raw: unknown): string[] {
   if (Array.isArray(raw)) {
@@ -180,9 +196,10 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   }
 
   public emitNewServiceRequest(request: any): void {
+    const safeRequest = sanitizeSocketPayload(request);
     this.server.to('room_company_admin').emit('new_service_request', {
       message: '¡Nueva solicitud de emergencia pendiente!',
-      requestDetails: request,
+      requestDetails: safeRequest,
     });
   }
 
@@ -216,23 +233,25 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   }
 
   public emitNewMissionToDriver(driverId: number, request: any): void {
+    const safeRequest = sanitizeSocketPayload(request);
     this.server.to(`user_${driverId}`).emit('new_mission', {
       message: '¡Nueva emergencia asignada!',
-      requestDetails: request,
+      requestDetails: safeRequest,
     });
   }
 
   public emitRequestAssignedToClient(clientId: number, request: any): void {
+    const safeRequest = sanitizeSocketPayload(request);
     // Notificar al cliente
     this.server.to(`user_${clientId}`).emit('request_assigned', {
       message: '¡Tu ambulancia ha sido asignada!',
-      requestDetails: request,
+      requestDetails: safeRequest,
     });
     
     // Notificar también a los admins para actualización en tiempo real
     this.server.to('room_company_admin').emit('request_assigned', {
       message: 'Solicitud asignada',
-      requestDetails: request,
+      requestDetails: safeRequest,
     });
   }
 
@@ -243,30 +262,32 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
   }
 
   public emitRequestStatusUpdate(clientId: number, request: any): void {
+    const safeRequest = sanitizeSocketPayload(request);
     // Notificar al cliente
     this.server.to(`user_${clientId}`).emit('request_status_updated', {
       message: `El estado de tu solicitud ahora es: ${request.status}`,
-      requestDetails: request,
+      requestDetails: safeRequest,
     });
     
     // Notificar también a los admins para actualización en tiempo real
     this.server.to('room_company_admin').emit('request_status_updated', {
       message: `Estado actualizado: ${request.status}`,
-      requestDetails: request,
+      requestDetails: safeRequest,
     });
   }
 
   public emitRequestCanceledToDriver(driverId: number, request: any): void {
+    const safeRequest = sanitizeSocketPayload(request);
     // Notificar al conductor
     this.server.to(`user_${driverId}`).emit('request_canceled', {
       message: 'La solicitud de emergencia ha sido cancelada por el cliente.',
-      requestDetails: request,
+      requestDetails: safeRequest,
     });
     
     // Notificar también a los admins para actualización en tiempo real
     this.server.to('room_company_admin').emit('request_canceled', {
       message: 'Solicitud cancelada',
-      requestDetails: request,
+      requestDetails: safeRequest,
     });
   }
 
@@ -275,7 +296,7 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
    * Notifica al conductor calificado y al admin de la empresa
    */
   public emitRatingCreated(rating: any): void {
-    console.log('⭐ Emitiendo evento rating_created:', JSON.stringify(rating, null, 2));
+    const safeRating = sanitizeSocketPayload(rating);
     const ratedUserId = rating.rated?.id || rating.rated_user_id;
     const companyUserId = rating.serviceRequest?.shift?.ambulance?.company?.user?.id;
 
@@ -286,7 +307,7 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
       console.log(`⭐ Enviando rating_created a user_${ratedUserId}`);
       this.server.to(`user_${ratedUserId}`).emit('rating_created', {
         message: 'Has recibido una nueva calificación',
-        rating: rating,
+        rating: safeRating,
       });
     }
 
@@ -295,12 +316,12 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
       console.log(`⭐ Enviando rating_created a user_${companyUserId} y room_company_admin`);
       this.server.to(`user_${companyUserId}`).emit('rating_created', {
         message: 'Nueva calificación recibida',
-        rating: rating,
+        rating: safeRating,
       });
       // También emitir a la sala de admins
       this.server.to('room_company_admin').emit('rating_created', {
         message: 'Nueva calificación recibida',
-        rating: rating,
+        rating: safeRating,
       });
     } else {
       console.log('⚠️ companyUserId es null o undefined');
